@@ -3,6 +3,7 @@
 #include <string>
 
 #include <Windows.h>
+#include <windowsx.h>
 #include <dwmapi.h>
 #include <glad/glad.h>
 
@@ -35,6 +36,8 @@ wglSwapIntervalEXTFunction* wglSwapIntervalEXT;
 // Window
 //
 
+static constexpr size_t EVENT_BUFFER_SIZE = 8;
+
 struct Window {
 	std::wstring title;
 	uint32_t width;
@@ -43,6 +46,9 @@ struct Window {
 	HWND handle;
 
 	bool should_close;
+
+	WindowEvent events[EVENT_BUFFER_SIZE];
+	size_t event_count;
 };
 
 LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam);
@@ -111,12 +117,18 @@ bool window_should_close(const Window* window) {
 }
 
 void poll_window_events(Window* window) {
+	window->event_count = 0;
+
 	MSG message{};
 	while (PeekMessageW(&message, window->handle, 0, 0, PM_REMOVE))
 	{
 		TranslateMessage(&message);
 		DispatchMessageW(&message);
 	}
+}
+
+Span<const WindowEvent> get_window_events(const Window* window) {
+	return Span(window->events, window->event_count);
 }
 
 UVec2 get_window_framebuffer_size(const Window* window) {
@@ -141,6 +153,21 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 	case WM_NCCALCSIZE:
 	{
 		return WVR_ALIGNTOP | WVR_ALIGNLEFT;
+	}
+	case WM_MOUSEMOVE:
+	{
+		int32_t x = GET_X_LPARAM(lParam);
+		int32_t y = GET_Y_LPARAM(lParam);
+
+		if (window->event_count < EVENT_BUFFER_SIZE) {
+			WindowEvent& event = window->events[window->event_count];
+			window->event_count++;
+
+			event.kind = WindowEventKind::MouseMoved;
+			event.data.mouse_moved.position = UVec2 { static_cast<uint32_t>(x), static_cast<uint32_t>(y) };
+		}
+
+		break;
 	}
 	case WM_CLOSE:
 		window->should_close = true;

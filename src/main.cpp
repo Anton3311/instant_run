@@ -93,7 +93,7 @@ int main()
 
 	initialize_renderer(window);
 
-	Font font = load_font_from_file("C:/Windows/Fonts/Times.ttf", 18.0f);
+	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 18.0f);
 	ui::Theme theme{};
 	theme.default_font = &font;
 	theme.button_color = Color(100, 100, 100, 255);

@@ -19,6 +19,10 @@ int main()
 	theme.item_spacing = 2.0f;
 	theme.frame_padding = Vec2 { 4.0f, 4.0f };
 
+	wchar_t text_buffer[16];
+	ui::TextInputState input_state{};
+	input_state.buffer = Span(text_buffer, 16);
+
 	ui::set_theme(theme);
 
 	while (!window_should_close(window)) {
@@ -31,10 +35,7 @@ int main()
 			printf("hello ");
 		}
 
-		draw_rect({ Vec2 { 0.0f, 0.0f }, Vec2 { 20.0f, 20.0f } }, WHITE);
-		draw_rect({ Vec2 { 10.0f, 4.0f }, Vec2 { 20.0f, 60.0f } }, WHITE);
-
-		draw_text(L"Hello world", Vec2 { 0.0f, 100.0f }, font, WHITE);
+		ui::text_input(input_state, 128.0);
 
 		ui::end_frame();
 		end_frame();

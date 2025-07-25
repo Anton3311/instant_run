@@ -38,7 +38,7 @@ struct WindowEvent {
 
 		struct {
 			wchar_t c;
-		} CharTyped;
+		} char_typed;
 	} data;
 };
 

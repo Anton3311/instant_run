@@ -19,6 +19,12 @@ struct Theme {
 	Vec2 frame_padding;
 };
 
+struct TextInputState {
+	size_t cursor_position;
+	size_t text_length;
+	Span<wchar_t> buffer;
+};
+
 void begin_frame(const Window& window);
 void end_frame();
 
@@ -27,6 +33,7 @@ void set_theme(const Theme& theme);
 Vec2 compute_text_size(const Font& font, std::wstring_view text);
 
 bool button(std::wstring_view text);
+bool text_input(TextInputState& input_state, float width);
 void text(std::wstring_view text);
 
 }

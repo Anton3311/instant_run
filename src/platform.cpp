@@ -1,6 +1,7 @@
 #include "platform.h"
 
 #include <string>
+#include <iostream>
 
 #include <Windows.h>
 #include <windowsx.h>
@@ -65,6 +66,7 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 	window_class.lpfnWndProc = window_procedure;
 	window_class.hInstance = GetModuleHandleA(nullptr);
 	window_class.lpszClassName = WINDOW_CLASS_NAME;
+	window_class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
 
 	if (!RegisterClassW(&window_class))
 	{
@@ -74,7 +76,7 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 	window->handle = CreateWindowExW(0,
 		WINDOW_CLASS_NAME,
 		window->title.c_str(),
-		WS_OVERLAPPEDWINDOW | WS_VISIBLE,
+		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT,
 		CW_USEDEFAULT,
 		static_cast<int>(window->width),
@@ -89,15 +91,19 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 		return nullptr;
 	}
 
+#if 0
 	LONG_PTR style = GetWindowLongPtr(window->handle, GWL_STYLE);
 	style |= WS_THICKFRAME;
 	style &= ~WS_CAPTION;
 	SetWindowLongPtr(window->handle, GWL_STYLE, style);
+#endif
 
+#if 0
 	MARGINS margins{};
 	DwmExtendFrameIntoClientArea(window->handle, &margins);
 
 	SetWindowPos(window->handle, NULL, 0, 0, width, height, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCOPYBITS);
+#endif
 	ShowWindow(window->handle, SW_SHOW);
 
 	SetWindowLongPtrW(window->handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
@@ -136,6 +142,7 @@ UVec2 get_window_framebuffer_size(const Window* window) {
 	GetWindowRect(window->handle, &rect);
 	int width = rect.right - rect.left;
 	int height = rect.bottom - rect.top;
+	return { window->width, window->height };
 	return UVec2 { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 }
 
@@ -148,12 +155,14 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 
 	switch (message)
 	{
+#if 0
 	case WM_NCHITTEST:
 		return HTCLIENT;
 	case WM_NCCALCSIZE:
 	{
 		return WVR_ALIGNTOP | WVR_ALIGNLEFT;
 	}
+#endif
 	case WM_MOUSEMOVE:
 	{
 		int32_t x = GET_X_LPARAM(lParam);
@@ -167,7 +176,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 			event.data.mouse_moved.position = UVec2 { static_cast<uint32_t>(x), static_cast<uint32_t>(y) };
 		}
 
-		break;
+		return 0;
 	}
 	case WM_LBUTTONDOWN:
 	{
@@ -179,7 +188,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 			event.data.mouse_pressed.button = MouseButton::Left;
 		}
 
-		break;
+		return 0;
 	}
 	case WM_LBUTTONUP:
 	{
@@ -191,12 +200,22 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 			event.data.mouse_released.button = MouseButton::Left;
 		}
 
-		break;
+		return 0;
 	}
+	case WM_CHAR:
+		if (window->event_count < EVENT_BUFFER_SIZE) {
+			WindowEvent& event = window->events[window->event_count];
+			window->event_count++;
+
+			event.kind = WindowEventKind::CharTyped;
+			event.data.char_typed.c = (wchar_t)wParam;
+		}
+
+		return 0;
 	case WM_CLOSE:
 		window->should_close = true;
 		PostQuitMessage(0);
-		break;
+		return 0;
 	}
 
 	return DefWindowProc(window_handle, message, wParam, lParam);

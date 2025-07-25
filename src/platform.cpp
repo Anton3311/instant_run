@@ -316,6 +316,24 @@ bool translate_key_code(WPARAM virtual_key_code, KeyCode& output) {
 	case VK_ESCAPE:
 		output = KeyCode::Escape;
 		return true;
+	case VK_RETURN:
+		output = KeyCode::Enter;
+		return true;
+	case VK_BACK:
+		output = KeyCode::Backspace;
+		return true;
+	case VK_UP:
+		output = KeyCode::ArrowUp;
+		return true;
+	case VK_DOWN:
+		output = KeyCode::ArrowDown;
+		return true;
+	case VK_LEFT:
+		output = KeyCode::ArrowLeft;
+		return true;
+	case VK_RIGHT:
+		output = KeyCode::ArrowRight;
+		return true;
 	}
 
 	return false;

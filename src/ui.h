@@ -25,7 +25,9 @@ struct TextInputState {
 	Span<wchar_t> buffer;
 };
 
-void begin_frame(const Window& window);
+void initialize(const Window& window);
+
+void begin_frame();
 void end_frame();
 
 void set_theme(const Theme& theme);

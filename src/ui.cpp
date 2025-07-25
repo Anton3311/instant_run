@@ -17,6 +17,7 @@ enum class MouseButtonState {
 };
 
 struct State {
+	const Window* window;
 	Theme theme;
 
 	Vec2 cursor;
@@ -36,6 +37,10 @@ static State s_ui_state;
 // UI Functions
 //
 
+void initialize(const Window& window) {
+	s_ui_state.window = &window;
+}
+
 void add_item(Rect bounds) {
 	s_ui_state.last_item.bounds = bounds;
 
@@ -52,7 +57,7 @@ bool is_item_hoevered() {
 	return rect_contains_point(s_ui_state.last_item.bounds, s_ui_state.mouse_position);
 }
 
-void begin_frame(const Window& window) {
+void begin_frame() {
 	s_ui_state.cursor = Vec2{};
 	s_ui_state.last_item = {};
 
@@ -60,7 +65,7 @@ void begin_frame(const Window& window) {
 
 	s_ui_state.has_typed_char = false;
 
-	Span<const WindowEvent> events = get_window_events(&window);
+	Span<const WindowEvent> events = get_window_events(s_ui_state.window);
 	for (size_t i = 0; i < events.count; i++) {
 		switch (events[i].kind) {
 		case WindowEventKind::MouseMoved: {
@@ -145,12 +150,43 @@ bool text_input(TextInputState& input_state, float width) {
 	// Process Input
 	
 	bool changed = false;
-	if (s_ui_state.has_typed_char) {
-		if (input_state.text_length < input_state.buffer.count) {
-			input_state.buffer.values[input_state.text_length] = s_ui_state.typed_char;
-			input_state.text_length += 1;
+	Span<const WindowEvent> events = get_window_events(s_ui_state.window);
+	for (size_t i = 0; i < events.count; i++) {
+		switch (events[i].kind) {
+		case WindowEventKind::Key:
+		{
+			auto& key_event = events[i].data.key;
+			if (key_event.action == InputAction::Pressed) {
+				if (input_state.text_length > 0) {
+					input_state.text_length -= 1;
 
-			changed = true;
+					changed = true;
+				} 
+			}
+
+			break;
+		}
+		case WindowEventKind::CharTyped:
+		{
+			auto& char_event = events[i].data.char_typed;
+			
+			if (input_state.text_length < input_state.buffer.count) {
+				// HACK: Allow any char
+				
+				uint32_t char_range_end = s_ui_state.theme.default_font->char_range_start
+					+ s_ui_state.theme.default_font->glyph_count;
+
+				if ((uint32_t)char_event.c >= s_ui_state.theme.default_font->char_range_start
+						&& (uint32_t)char_event.c < char_range_end) {
+					input_state.buffer.values[input_state.text_length] = char_event.c;
+					input_state.text_length += 1;
+
+					changed = true;
+				}
+			}
+
+			break;
+		}
 		}
 	}
 

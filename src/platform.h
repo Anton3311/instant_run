@@ -28,6 +28,13 @@ enum class InputAction {
 
 enum class KeyCode {
 	Escape,
+	Enter,
+	Backspace,
+
+	ArrowUp,
+	ArrowDown,
+	ArrowLeft,
+	ArrowRight,
 };
 
 struct WindowEvent {

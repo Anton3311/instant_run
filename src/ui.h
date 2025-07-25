@@ -32,6 +32,19 @@ void set_theme(const Theme& theme);
 
 Vec2 compute_text_size(const Font& font, std::wstring_view text);
 
+//
+// UI Item
+//
+
+// TODO: Pass the size instead of the full bounds
+void add_item(Rect bounds);
+void add_item(Vec2 size);
+bool is_item_hoevered();
+
+//
+// Widgets
+//
+
 bool button(std::wstring_view text);
 bool text_input(TextInputState& input_state, float width);
 void text(std::wstring_view text);

@@ -36,13 +36,19 @@ static State s_ui_state;
 // UI Functions
 //
 
-static void add_item(Rect bounds) {
+void add_item(Rect bounds) {
 	s_ui_state.last_item.bounds = bounds;
 
 	s_ui_state.cursor.y += bounds.max.y - bounds.min.y + s_ui_state.theme.item_spacing;
 }
 
-static bool is_item_hoevered() {
+void add_item(Vec2 size) {
+	s_ui_state.last_item.bounds = Rect { s_ui_state.cursor, s_ui_state.cursor + size };
+
+	s_ui_state.cursor.y += size.y + s_ui_state.theme.item_spacing;
+}
+
+bool is_item_hoevered() {
 	return rect_contains_point(s_ui_state.last_item.bounds, s_ui_state.mouse_position);
 }
 
@@ -166,7 +172,12 @@ bool text_input(TextInputState& input_state, float width) {
 }
 
 void text(std::wstring_view text) {
+	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
 
+	Vec2 text_position = s_ui_state.cursor;
+
+	add_item(text_size);
+	draw_text(text, text_position, *s_ui_state.theme.default_font, s_ui_state.theme.text_color);
 }
 
 }

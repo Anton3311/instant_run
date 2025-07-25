@@ -126,7 +126,7 @@ void poll_window_events(Window* window) {
 	window->event_count = 0;
 
 	MSG message{};
-	while (PeekMessageW(&message, window->handle, 0, 0, PM_REMOVE))
+	while (GetMessage(&message, nullptr, 0, 0))
 	{
 		TranslateMessage(&message);
 		DispatchMessageW(&message);

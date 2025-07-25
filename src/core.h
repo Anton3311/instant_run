@@ -14,10 +14,10 @@ static constexpr Color WHITE = Color { 255, 255, 255, 255 };
 static constexpr Color TRANSPARENT = Color { 0, 0, 0, 0 };
 
 inline uint32_t color_to_uint32(Color color) {
-	return static_cast<uint32_t>(color.r)
-		| (static_cast<uint32_t>(color.g) << 8)
-		| (static_cast<uint32_t>(color.b) << 16)
-		| (static_cast<uint32_t>(color.a) << 24);
+	return (static_cast<uint32_t>(color.r) << 24)
+		| (static_cast<uint32_t>(color.g) << 16)
+		| (static_cast<uint32_t>(color.b) << 8)
+		| (static_cast<uint32_t>(color.a));
 }
 
 struct Vec2;

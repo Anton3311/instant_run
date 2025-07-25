@@ -67,6 +67,7 @@ int main()
 	entries.push_back(Entry { .name = L"raddbg", .path = "raddbg.exe" });
 
 	std::vector<size_t> matches;
+	size_t selected_result_entry = 0;
 
 	update_search_result({}, entries, matches);
 
@@ -78,8 +79,18 @@ int main()
 			switch (events[i].kind) {
 			case WindowEventKind::Key: {
 				auto& key_event = events[i].data.key;
-				if (key_event.action == InputAction::Pressed && key_event.code == KeyCode::Escape) {
-					close_window(*window);
+				if (key_event.action == InputAction::Pressed) {
+					switch (key_event.code) {
+					case KeyCode::Escape:
+						close_window(*window);
+						break;
+					case KeyCode::ArrowUp:
+						selected_result_entry = (selected_result_entry + matches.size() - 1) % matches.size();
+						break;
+					case KeyCode::ArrowDown:
+						selected_result_entry = (selected_result_entry + 1) % matches.size();
+						break;
+					}
 				}
 				break;
 		    }
@@ -94,13 +105,16 @@ int main()
 
 			std::wstring_view search_pattern(text_buffer, input_state.text_length);
 			update_search_result(search_pattern, entries, matches);
+
+			selected_result_entry = 0;
 		}
 
-		for (size_t match : matches) {
-			const Entry& entry = entries[match];
+		for (size_t i = 0; i < matches.size(); i++) {
+			bool is_selected = i == selected_result_entry;
+			const Entry& entry = entries[matches[i]];
 
 			ui::text(entry.name);
-			ui::text(entry.path.wstring());
+			ui::colored_text(entry.path.wstring(), is_selected ? Color { 255, 0, 0, 255 } : WHITE);
 		}
 
 		ui::end_frame();

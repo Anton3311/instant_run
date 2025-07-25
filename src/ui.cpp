@@ -207,13 +207,17 @@ bool text_input(TextInputState& input_state, float width) {
 	return changed;
 }
 
-void text(std::wstring_view text) {
+void colored_text(std::wstring_view text, Color color) {
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
 
 	Vec2 text_position = s_ui_state.cursor;
 
 	add_item(text_size);
-	draw_text(text, text_position, *s_ui_state.theme.default_font, s_ui_state.theme.text_color);
+	draw_text(text, text_position, *s_ui_state.theme.default_font, color);
+}
+
+void text(std::wstring_view text) {
+	colored_text(text, s_ui_state.theme.text_color);
 }
 
 }

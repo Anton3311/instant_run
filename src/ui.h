@@ -49,6 +49,8 @@ bool is_item_hoevered();
 
 bool button(std::wstring_view text);
 bool text_input(TextInputState& input_state, float width);
+
+void colored_text(std::wstring_view text, Color color);
 void text(std::wstring_view text);
 
 }

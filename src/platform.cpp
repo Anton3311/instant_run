@@ -91,17 +91,13 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 		return nullptr;
 	}
 
-#if 1
 	LONG_PTR style = GetWindowLongPtr(window->handle, GWL_STYLE);
 	style |= WS_THICKFRAME;
-	// style &= ~WS_CAPTION;
+	style &= ~WS_CAPTION;
 	SetWindowLongPtr(window->handle, GWL_STYLE, style);
-#endif
 
-#if 0
 	MARGINS margins{};
 	DwmExtendFrameIntoClientArea(window->handle, &margins);
-#endif
 
 	SetWindowPos(window->handle, NULL, 0, 0, width, height, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCOPYBITS);
 	ShowWindow(window->handle, SW_SHOW);
@@ -155,14 +151,12 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 
 	switch (message)
 	{
-#if 0
 	case WM_NCHITTEST:
 		return HTCLIENT;
+	case WM_NCPAINT:
+		return 0;
 	case WM_NCCALCSIZE:
-	{
 		return WVR_ALIGNTOP | WVR_ALIGNLEFT;
-	}
-#endif
 	case WM_MOUSEMOVE:
 	{
 		int32_t x = GET_X_LPARAM(lParam);
@@ -218,7 +212,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 		return 0;
 	}
 
-	return DefWindowProc(window_handle, message, wParam, lParam);
+	return DefWindowProcW(window_handle, message, wParam, lParam);
 }
 
 bool create_opengl_context(Window* window) {

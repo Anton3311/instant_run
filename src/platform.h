@@ -17,7 +17,17 @@ enum class WindowEventKind {
 	MouseMoved,
 	MousePressed,
 	MouseReleased,
+	Key,
 	CharTyped,
+};
+
+enum class InputAction {
+	Pressed,
+	Released,
+};
+
+enum class KeyCode {
+	Escape,
 };
 
 struct WindowEvent {
@@ -37,6 +47,11 @@ struct WindowEvent {
 		} mouse_released;
 
 		struct {
+			InputAction action;
+			KeyCode code;
+		} key;
+
+		struct {
 			wchar_t c;
 		} char_typed;
 	} data;
@@ -54,5 +69,7 @@ void poll_window_events(Window* window);
 Span<const WindowEvent> get_window_events(const Window* window);
 
 UVec2 get_window_framebuffer_size(const Window* window);
+
+void close_window(Window& window);
 
 void destroy_window(Window* window);

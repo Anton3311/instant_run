@@ -28,6 +28,19 @@ int main()
 	while (!window_should_close(window)) {
 		poll_window_events(window);
 
+		Span<const WindowEvent> events = get_window_events(window);
+		for (size_t i = 0; i < events.count; i++) {
+			switch (events[i].kind) {
+			case WindowEventKind::Key: {
+				auto& key_event = events[i].data.key;
+				if (key_event.action == InputAction::Pressed && key_event.code == KeyCode::Escape) {
+					close_window(*window);
+				}
+				break;
+		    }
+			}
+		}
+
 		begin_frame();
 		ui::begin_frame(*window);
 

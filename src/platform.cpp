@@ -55,6 +55,7 @@ struct Window {
 LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam);
 bool create_opengl_context(Window* window);
 bool init_opengl(Window* window);
+bool translate_key_code(WPARAM virtual_key_code, KeyCode& output);
 
 Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) {
 	Window* window = new Window();
@@ -142,7 +143,12 @@ UVec2 get_window_framebuffer_size(const Window* window) {
 	return UVec2 { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 }
 
+void close_window(Window& window) {
+	window.should_close = true;
+}
+
 void destroy_window(Window* window) {
+	// TODO: Delete all the resources
 	delete window;
 }
 
@@ -195,6 +201,22 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 		}
 
 		return 0;
+	}
+	case WM_KEYDOWN:
+	{
+		KeyCode key_code{};
+		if (translate_key_code(wParam, key_code)) {
+			if (window->event_count < EVENT_BUFFER_SIZE) {
+				WindowEvent& event = window->events[window->event_count];
+				window->event_count++;
+
+				event.kind = WindowEventKind::Key;
+				event.data.key.action = InputAction::Pressed;
+				event.data.key.code = key_code;
+			}
+		}
+
+		break;
 	}
 	case WM_CHAR:
 		if (window->event_count < EVENT_BUFFER_SIZE) {
@@ -287,4 +309,14 @@ bool init_opengl(Window* window) {
 	}
 
 	return true;
+}
+
+bool translate_key_code(WPARAM virtual_key_code, KeyCode& output) {
+	switch (virtual_key_code) {
+	case VK_ESCAPE:
+		output = KeyCode::Escape;
+		return true;
+	}
+
+	return false;
 }

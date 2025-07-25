@@ -91,19 +91,19 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 		return nullptr;
 	}
 
-#if 0
+#if 1
 	LONG_PTR style = GetWindowLongPtr(window->handle, GWL_STYLE);
 	style |= WS_THICKFRAME;
-	style &= ~WS_CAPTION;
+	// style &= ~WS_CAPTION;
 	SetWindowLongPtr(window->handle, GWL_STYLE, style);
 #endif
 
 #if 0
 	MARGINS margins{};
 	DwmExtendFrameIntoClientArea(window->handle, &margins);
+#endif
 
 	SetWindowPos(window->handle, NULL, 0, 0, width, height, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCOPYBITS);
-#endif
 	ShowWindow(window->handle, SW_SHOW);
 
 	SetWindowLongPtrW(window->handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
@@ -126,7 +126,7 @@ void poll_window_events(Window* window) {
 	window->event_count = 0;
 
 	MSG message{};
-	while (GetMessage(&message, nullptr, 0, 0))
+	while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
 	{
 		TranslateMessage(&message);
 		DispatchMessageW(&message);

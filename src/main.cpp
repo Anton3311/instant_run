@@ -11,6 +11,11 @@ struct Entry {
 	std::filesystem::path path;
 };
 
+struct ResultEntry {
+	uint32_t entry_index;
+	uint32_t score;
+};
+
 bool starts_with(std::wstring_view string, std::wstring_view start_pattern) {
 	if (string.length() < start_pattern.length()) {
 		return false;
@@ -26,13 +31,58 @@ bool starts_with(std::wstring_view string, std::wstring_view start_pattern) {
 	return true;
 }
 
-void update_search_result(std::wstring_view search_pattern, const std::vector<Entry>& entries, std::vector<size_t>& result) {
+uint32_t dp[100][100];
+// FIXME: doesn't work
+uint32_t compute_edit_distance(const std::wstring_view& string, const std::wstring_view& pattern)
+{
+	for (size_t i = 0; i < string.size(); i++)
+		dp[i][0] = i;
+
+	for (size_t i = 0; i < pattern.size(); i++)
+		dp[0][i] = i;
+
+	for (size_t i = 1; i <= string.size(); i++)
+	{
+		for (size_t j = 1; j <= pattern.size(); j++)
+		{
+			uint32_t sub_cost = (string[i - 1] == pattern[j - 1]) ? 0 : 1;
+
+			dp[i][j] = std::min<uint32_t>(
+				dp[i - 1][j] + 1,
+				std::min<uint32_t>(
+					dp[i][j - 1] + 1,
+					dp[i - 1][j - 1] + sub_cost));
+		}
+	}
+
+	return dp[string.size()][pattern.size()];
+}
+
+void update_search_result(std::wstring_view search_pattern,
+		const std::vector<Entry>& entries,
+		std::vector<ResultEntry>& result) {
 	result.clear();
 
 	for (size_t i = 0; i < entries.size(); i++) {
 		const Entry& entry = entries[i];
-		if (starts_with(entry.name, search_pattern) || starts_with(entry.path.wstring(), search_pattern)) {
-			result.push_back(i);
+
+		uint32_t score = compute_edit_distance(entry.name, search_pattern);
+		result.push_back({ (uint32_t)i, score });
+	}
+
+	std::sort(result.begin(), result.end(), [&](auto a, auto b) -> bool {
+		return a.score < b.score;
+	});
+}
+
+void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entries) {
+	for (std::filesystem::path child : std::filesystem::directory_iterator(path)) {
+		if (std::filesystem::is_directory(child)) {
+			walk_directory(child, entries);
+		} else {
+			Entry& entry = entries.emplace_back();
+			entry.name = child.filename().wstring();
+			entry.path = child;
 		}
 	}
 }
@@ -60,13 +110,10 @@ int main()
 	ui::set_theme(theme);
 
 	std::vector<Entry> entries;
-	entries.push_back(Entry { .name = L"Chrome", .path = "chrome.exe" });
-	entries.push_back(Entry { .name = L"GIMP", .path = "gimp.exe" });
-	entries.push_back(Entry { .name = L"Obsidian", .path = "obsidian.exe" });
-	entries.push_back(Entry { .name = L"Visual Studio", .path = "visual_stdio.exe" });
-	entries.push_back(Entry { .name = L"raddbg", .path = "raddbg.exe" });
 
-	std::vector<size_t> matches;
+	walk_directory("C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs", entries);
+
+	std::vector<ResultEntry> matches;
 	size_t selected_result_entry = 0;
 
 	update_search_result({}, entries, matches);
@@ -111,10 +158,9 @@ int main()
 
 		for (size_t i = 0; i < matches.size(); i++) {
 			bool is_selected = i == selected_result_entry;
-			const Entry& entry = entries[matches[i]];
+			const Entry& entry = entries[matches[i].entry_index];
 
-			ui::text(entry.name);
-			ui::colored_text(entry.path.wstring(), is_selected ? Color { 255, 0, 0, 255 } : WHITE);
+			ui::colored_text(entry.name, is_selected ? Color { 0, 255, 0, 255 } : WHITE);
 		}
 
 		ui::end_frame();

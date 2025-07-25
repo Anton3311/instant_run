@@ -157,11 +157,14 @@ bool text_input(TextInputState& input_state, float width) {
 		{
 			auto& key_event = events[i].data.key;
 			if (key_event.action == InputAction::Pressed) {
-				if (input_state.text_length > 0) {
-					input_state.text_length -= 1;
-
-					changed = true;
-				} 
+				switch (key_event.code) {
+				case KeyCode::Backspace:
+					if (input_state.text_length > 0) {
+						input_state.text_length -= 1;
+						changed = true;
+					} 
+					break;
+				}
 			}
 
 			break;

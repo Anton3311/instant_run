@@ -2,16 +2,28 @@
 
 #include "platform.h"
 
+#include <cstring>
+
 namespace ui {
 
 struct ItemState {
 	Rect bounds;
 };
 
+enum class MouseButtonState {
+	None,
+	Pressed,
+	Released,
+};
+
 struct State {
 	Theme theme;
+
 	Vec2 cursor;
+	
 	Vec2 mouse_position;
+	MouseButtonState mouse_button_states[MOUSE_BUTTON_COUNT];
+
 	ItemState last_item;
 };
 
@@ -35,13 +47,24 @@ void begin_frame(const Window& window) {
 	s_state.cursor = Vec2{};
 	s_state.last_item = {};
 
+	std::memset(s_state.mouse_button_states, 0, sizeof(s_state.mouse_button_states));
+
 	Span<const WindowEvent> events = get_window_events(&window);
 	for (size_t i = 0; i < events.count; i++) {
 		switch (events[i].kind) {
-		case WindowEventKind::MouseMoved:
+		case WindowEventKind::MouseMoved: {
 			UVec2 pos = events[i].data.mouse_moved.position;
 			s_state.mouse_position = Vec2 { static_cast<float>(pos.x), static_cast<float>(pos.y) };
 			break;
+		}
+		case WindowEventKind::MousePressed: {
+			s_state.mouse_button_states[(size_t)events[i].data.mouse_pressed.button] = MouseButtonState::Pressed;
+			break;
+		}
+		case WindowEventKind::MouseReleased: {
+			s_state.mouse_button_states[(size_t)events[i].data.mouse_pressed.button] = MouseButtonState::Released;
+			break;
+		}
 		}
 	}
 }
@@ -90,6 +113,7 @@ bool button(std::wstring_view text) {
 	add_item(item_bounds);
 
 	bool hovered = is_item_hoevered();
+	bool pressed = s_state.mouse_button_states[(size_t)MouseButton::Left] == MouseButtonState::Pressed;
 
 	Color button_color = s_state.theme.button_color;
 	if (hovered) {
@@ -99,7 +123,7 @@ bool button(std::wstring_view text) {
 	draw_rect(item_bounds, button_color);
 	draw_text(text, item_bounds.min + s_state.theme.frame_padding, *s_state.theme.default_font, s_state.theme.text_color);
 
-	return false;
+	return pressed && hovered;
 }
 
 void text(std::wstring_view text) {

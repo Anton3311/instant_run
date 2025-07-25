@@ -169,6 +169,30 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 
 		break;
 	}
+	case WM_LBUTTONDOWN:
+	{
+		if (window->event_count < EVENT_BUFFER_SIZE) {
+			WindowEvent& event = window->events[window->event_count];
+			window->event_count++;
+
+			event.kind = WindowEventKind::MousePressed;
+			event.data.mouse_pressed.button = MouseButton::Left;
+		}
+
+		break;
+	}
+	case WM_LBUTTONUP:
+	{
+		if (window->event_count < EVENT_BUFFER_SIZE) {
+			WindowEvent& event = window->events[window->event_count];
+			window->event_count++;
+
+			event.kind = WindowEventKind::MouseReleased;
+			event.data.mouse_released.button = MouseButton::Left;
+		}
+
+		break;
+	}
 	case WM_CLOSE:
 		window->should_close = true;
 		PostQuitMessage(0);

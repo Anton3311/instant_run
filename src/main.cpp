@@ -27,7 +27,9 @@ int main()
 		begin_frame();
 		ui::begin_frame(*window);
 
-		ui::button(L"Click me");
+		if (ui::button(L"Click me")) {
+			printf("hello ");
+		}
 
 		draw_rect({ Vec2 { 0.0f, 0.0f }, Vec2 { 20.0f, 20.0f } }, WHITE);
 		draw_rect({ Vec2 { 10.0f, 4.0f }, Vec2 { 20.0f, 60.0f } }, WHITE);

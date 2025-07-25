@@ -6,10 +6,12 @@
 #include "core.h"
 
 enum class MouseButton {
-	Left,
-	Right,
-	Middle,
+	Left = 0,
+	Right = 1,
+	Middle = 2,
 };
+
+static constexpr size_t MOUSE_BUTTON_COUNT = 3;
 
 enum class WindowEventKind {
 	MouseMoved,
@@ -27,11 +29,11 @@ struct WindowEvent {
 		} mouse_moved;
 
 		struct {
-			MouseButton mouse_button;
+			MouseButton button;
 		} mouse_pressed;
 
 		struct {
-			MouseButton mouse_button;
+			MouseButton button;
 		} mouse_released;
 
 		struct {

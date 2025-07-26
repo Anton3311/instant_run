@@ -60,6 +60,22 @@ inline Vec2 operator*(Vec2 a, float scalar) {
 	return Vec2 { a.x * scalar, a.y * scalar };
 }
 
+inline float min(float a, float b) {
+	return a < b ? a : b;
+}
+
+inline float max(float a, float b) {
+	return a < b ? b : a;
+}
+
+inline Vec2 min(Vec2 a, Vec2 b) {
+	return Vec2 { min(a.x, b.x), min(a.y, b.y) };
+}
+
+inline Vec2 max(Vec2 a, Vec2 b) {
+	return Vec2 { max(a.x, b.x), max(a.y, b.y) };
+}
+
 //
 // Rect
 //
@@ -72,6 +88,13 @@ struct Rect {
 inline bool rect_contains_point(const Rect& rect, Vec2 point) {
 	return point.x >= rect.min.x && point.y >= rect.min.y
 		&& point.x <= rect.max.x && point.y <= rect.max.y;
+}
+
+inline Rect combine_rects(Rect a, Rect b) {
+	return Rect {
+		.min = min(a.min, b.min),
+		.max = max(a.max, b.max)
+	};
 }
 
 //

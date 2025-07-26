@@ -3,11 +3,24 @@
 #include "platform.h"
 
 #include <cstring>
+#include <vector>
 
 namespace ui {
 
 struct ItemState {
 	Rect bounds;
+};
+
+enum class LayoutKind {
+	Vertical,
+	Horizontal,
+};
+
+struct LayoutState {
+	LayoutKind kind;
+	Rect bounds;
+	Vec2 cursor;
+	bool has_item;
 };
 
 enum class MouseButtonState {
@@ -29,6 +42,9 @@ struct State {
 	wchar_t typed_char;
 
 	ItemState last_item;
+
+	std::vector<LayoutState> layout_stack;
+	LayoutState layout;
 };
 
 static State s_ui_state;
@@ -41,16 +57,24 @@ void initialize(const Window& window) {
 	s_ui_state.window = &window;
 }
 
-void add_item(Rect bounds) {
-	s_ui_state.last_item.bounds = bounds;
-
-	s_ui_state.cursor.y += bounds.max.y - bounds.min.y + s_ui_state.theme.item_spacing;
-}
-
 void add_item(Vec2 size) {
-	s_ui_state.last_item.bounds = Rect { s_ui_state.cursor, s_ui_state.cursor + size };
+	s_ui_state.last_item.bounds = Rect { s_ui_state.layout.cursor, s_ui_state.layout.cursor + size };
 
-	s_ui_state.cursor.y += size.y + s_ui_state.theme.item_spacing;
+	switch (s_ui_state.layout.kind) {
+	case LayoutKind::Vertical:
+		s_ui_state.layout.cursor.y += size.y + s_ui_state.theme.item_spacing;
+		break;
+	case LayoutKind::Horizontal:
+		s_ui_state.layout.cursor.x += size.x + s_ui_state.theme.item_spacing;
+		break;
+	}
+
+	if (s_ui_state.layout.has_item) {
+		s_ui_state.layout.bounds = combine_rects(s_ui_state.layout.bounds, s_ui_state.last_item.bounds);
+	} else {
+		s_ui_state.layout.has_item = true;
+		s_ui_state.layout.bounds = s_ui_state.last_item.bounds;
+	}
 }
 
 bool is_item_hoevered() {
@@ -58,7 +82,7 @@ bool is_item_hoevered() {
 }
 
 void set_cursor(Vec2 position) {
-
+	s_ui_state.layout.cursor = position;
 }
 
 Vec2 get_item_size() {
@@ -67,7 +91,7 @@ Vec2 get_item_size() {
 }
 
 void begin_frame() {
-	s_ui_state.cursor = Vec2{};
+	s_ui_state.layout.cursor = Vec2{};
 	s_ui_state.last_item = {};
 
 	std::memset(s_ui_state.mouse_button_states, 0, sizeof(s_ui_state.mouse_button_states));
@@ -138,8 +162,8 @@ bool button(std::wstring_view text) {
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
 	Vec2 button_size = text_size + s_ui_state.theme.frame_padding * 2.0f;
 
-	Rect item_bounds = { .min = s_ui_state.cursor, .max = s_ui_state.cursor + button_size };
-	add_item(item_bounds);
+	add_item(button_size);
+	Rect item_bounds = s_ui_state.layout.bounds;
 
 	bool hovered = is_item_hoevered();
 	bool pressed = s_ui_state.mouse_button_states[(size_t)MouseButton::Left] == MouseButtonState::Pressed;
@@ -208,10 +232,11 @@ bool text_input(TextInputState& input_state, float width) {
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
 
 	Vec2 text_field_size = text_size + s_ui_state.theme.frame_padding * 2.0f;
+	text_field_size.x = width;
 
-	Rect bounds = { s_ui_state.cursor, s_ui_state.cursor + text_field_size };
+	add_item(text_field_size);
 
-	add_item(bounds);
+	Rect bounds = s_ui_state.last_item.bounds;
 
 	draw_rect(bounds, s_ui_state.theme.button_color);
 	draw_text(text, bounds.min + s_ui_state.theme.frame_padding, *s_ui_state.theme.default_font, s_ui_state.theme.text_color);
@@ -227,7 +252,7 @@ bool text_input(TextInputState& input_state, float width) {
 void colored_text(std::wstring_view text, Color color) {
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
 
-	Vec2 text_position = s_ui_state.cursor;
+	Vec2 text_position = s_ui_state.layout.cursor;
 
 	add_item(text_size);
 	draw_text(text, text_position, *s_ui_state.theme.default_font, color);
@@ -235,6 +260,51 @@ void colored_text(std::wstring_view text, Color color) {
 
 void text(std::wstring_view text) {
 	colored_text(text, s_ui_state.theme.text_color);
+}
+
+//
+// Layout
+//
+
+static void pop_layout() {
+	Rect current_layout_bounds = s_ui_state.layout.bounds;
+
+	s_ui_state.layout = s_ui_state.layout_stack.back();
+	s_ui_state.layout_stack.pop_back();
+
+	add_item(current_layout_bounds.max - current_layout_bounds.min);
+
+	draw_rect_lines(current_layout_bounds, Color { 255, 0, 255, 255 });
+}
+
+void begin_vertical_layout() {
+	s_ui_state.layout_stack.push_back(s_ui_state.layout);
+	
+	Vec2 cursor = s_ui_state.layout.cursor;
+	s_ui_state.layout = LayoutState {
+		.kind = LayoutKind::Vertical,
+		.bounds = Rect{},
+		.cursor = cursor
+	};
+}
+
+void end_vertical_layout() {
+	pop_layout();
+}
+
+void begin_horizontal_layout() {
+	s_ui_state.layout_stack.push_back(s_ui_state.layout);
+
+	Vec2 cursor = s_ui_state.layout.cursor;
+	s_ui_state.layout = LayoutState {
+		.kind = LayoutKind::Horizontal,
+		.bounds = Rect{},
+		.cursor = cursor
+	};
+}
+
+void end_horizontal_layout() {
+	pop_layout();
 }
 
 }

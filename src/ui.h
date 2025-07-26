@@ -38,8 +38,6 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text);
 // UI Item
 //
 
-// TODO: Pass the size instead of the full bounds
-void add_item(Rect bounds);
 void add_item(Vec2 size);
 bool is_item_hoevered();
 Vec2 get_item_size();
@@ -54,6 +52,16 @@ bool text_input(TextInputState& input_state, float width);
 
 void colored_text(std::wstring_view text, Color color);
 void text(std::wstring_view text);
+
+//
+// Layout
+//
+
+void begin_vertical_layout();
+void end_vertical_layout();
+
+void begin_horizontal_layout();
+void end_horizontal_layout();
 
 }
 

@@ -407,6 +407,10 @@ void end_frame() {
 	s_state.commands.clear();
 }
 
+void draw_line(Vec2 a, Vec2 b, Color color) {
+	draw_rect(Rect { .min = a - Vec2 { 0.5f, 0.5f }, .max = b + Vec2 { 0.5f, 0.5f} }, color);
+}
+
 void draw_rect(const Rect& rect, Color color) {
 	push_texture(s_state.white_texture);
 
@@ -446,6 +450,16 @@ void draw_rect(const Rect& rect, Color color) {
 
 	DrawCommand& command = s_state.commands.back();
 	command.index_count += 6;
+}
+
+void draw_rect_lines(const Rect& rect, Color color) {
+	Vec2 top_right = Vec2 { rect.max.x, rect.min.y };
+	Vec2 bottom_left = Vec2 { rect.min.x, rect.max.y };
+
+	draw_line(rect.min, top_right, color);
+	draw_line(top_right, rect.max, color);
+	draw_line(bottom_left, rect.max, color);
+	draw_line(rect.min, bottom_left, color);
 }
 
 void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color color) {

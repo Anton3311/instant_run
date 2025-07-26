@@ -207,6 +207,7 @@ int main()
 
 		begin_frame();
 		ui::begin_frame();
+		ui::begin_vertical_layout();
 
 		if (ui::text_input(input_state, 128.0)) {
 			std::wstring_view search_pattern(text_buffer, input_state.text_length);
@@ -225,17 +226,40 @@ int main()
 
 			Color text_color = is_selected ? Color { 0, 255, 0, 255 } : WHITE;
 
-			ui::colored_text(entry.name, text_color);
-		
-			for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
-				RangeU32 highlight_range = highlights[i];
+			{
+				ui::begin_horizontal_layout();
 
-				std::wstring_view highlighted_text = std::wstring_view(entry.name)
-					.substr(highlight_range.start, highlight_range.count);
+				uint32_t cursor = 0;
+				for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
+					RangeU32 highlight_range = highlights[i];
 
-				ui::colored_text(highlighted_text, highlight_color);
+					if (cursor != highlight_range.start) {
+						std::wstring_view t = std::wstring_view(entry.name)
+							.substr(cursor, highlight_range.start - cursor);
+
+						ui::colored_text(t, text_color);
+					}
+
+					std::wstring_view highlighted_text = std::wstring_view(entry.name)
+						.substr(highlight_range.start, highlight_range.count);
+
+					ui::colored_text(highlighted_text, highlight_color);
+
+					cursor = highlight_range.start + highlight_range.count;
+				}
+
+				if (cursor < entry.name.length()) {
+					std::wstring_view t = std::wstring_view(entry.name)
+						.substr(cursor);
+
+					ui::colored_text(t, text_color);
+				}
+
+				ui::end_horizontal_layout();
 			}
 		}
+
+		ui::end_vertical_layout();
 
 		ui::end_frame();
 		end_frame();

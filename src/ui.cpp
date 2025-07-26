@@ -131,6 +131,10 @@ void end_frame() {
 
 }
 
+const Theme& get_theme() {
+	return s_ui_state.theme;
+}
+
 void set_theme(const Theme& theme) { 
 	s_ui_state.theme = theme;
 }
@@ -172,18 +176,23 @@ bool button(std::wstring_view text) {
 	Vec2 button_size = text_size + s_ui_state.theme.frame_padding * 2.0f;
 
 	add_item(button_size);
-	Rect item_bounds = s_ui_state.layout.bounds;
+	Rect item_bounds = s_ui_state.last_item.bounds;
 
 	bool hovered = is_item_hoevered();
 	bool pressed = s_ui_state.mouse_button_states[(size_t)MouseButton::Left] == MouseButtonState::Pressed;
 
-	Color button_color = s_ui_state.theme.button_color;
-	if (hovered) {
-		button_color = Color(255, 0, 0, 255);
+	Color button_color = s_ui_state.theme.widget_color;
+	if (pressed && hovered) {
+		button_color = s_ui_state.theme.widget_pressed_color;
+	} else if (hovered) {
+		button_color = s_ui_state.theme.widget_hovered_color;
 	}
 
 	draw_rect(item_bounds, button_color);
-	draw_text(text, item_bounds.min + s_ui_state.theme.frame_padding, *s_ui_state.theme.default_font, s_ui_state.theme.text_color);
+	draw_text(text,
+			item_bounds.min + s_ui_state.theme.frame_padding,
+			*s_ui_state.theme.default_font,
+			s_ui_state.theme.text_color);
 
 	return pressed && hovered;
 }
@@ -270,7 +279,7 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 
 	Rect bounds = s_ui_state.last_item.bounds;
 
-	draw_rect(bounds, s_ui_state.theme.button_color);
+	draw_rect(bounds, s_ui_state.theme.widget_color);
 
 	Vec2 text_position = bounds.min + s_ui_state.theme.frame_padding;
 	if (text.length() > 0) {

@@ -2,8 +2,14 @@
 
 #include <stdint.h>
 #include <string_view>
+#include <filesystem>
+#include <vector>
 
 #include "core.h"
+
+//
+// Window
+//
 
 enum class MouseButton {
 	Left = 0,
@@ -80,3 +86,9 @@ UVec2 get_window_framebuffer_size(const Window* window);
 void close_window(Window& window);
 
 void destroy_window(Window* window);
+
+//
+// File system
+//
+
+std::vector<std::filesystem::path> get_start_menu_folder_path();

@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include <Windows.h>
+#include <Shlobj.h>
 #include <windowsx.h>
 #include <dwmapi.h>
 #include <glad/glad.h>
@@ -351,4 +352,30 @@ bool translate_key_code(WPARAM virtual_key_code, KeyCode& output) {
 	}
 
 	return false;
+}
+
+//
+// File system
+//
+
+static std::filesystem::path get_known_system_path(KNOWNFOLDERID id) {
+	PWSTR path = nullptr;
+
+	std::filesystem::path result;
+
+	if (SHGetKnownFolderPath(id, 0, nullptr, &path) == S_OK) {
+		result = path;
+	}
+
+	CoTaskMemFree(path);
+	return result;
+}
+
+std::vector<std::filesystem::path> get_start_menu_folder_path() {
+	std::vector<std::filesystem::path> results;
+
+ 	results.push_back(get_known_system_path(FOLDERID_CommonStartMenu));
+ 	results.push_back(get_known_system_path(FOLDERID_Programs));
+
+	return results;
 }

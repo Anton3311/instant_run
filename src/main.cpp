@@ -86,7 +86,7 @@ uint32_t compute_logest_common_subsequence(
 
 	highlight_range.start = static_cast<uint32_t>(sequence_ranges.size());
 
-	for (size_t i = 0; i < (string.length() - pattern.length()); i++) {
+	for (size_t i = 0; i < (string.length() - pattern.length() + 1); i++) {
 		uint32_t sequence_length = 0;
 
 		for (size_t j = 0; j < pattern.size(); j++) {
@@ -135,14 +135,18 @@ void update_search_result(std::wstring_view search_pattern,
 	});
 }
 
+void append_entry(std::vector<Entry>& entries, const std::filesystem::path& path) {
+	Entry& entry = entries.emplace_back();
+	entry.name = path.filename().replace_extension("").wstring();
+	entry.path = path;
+}
+
 void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entries) {
 	for (std::filesystem::path child : std::filesystem::directory_iterator(path)) {
 		if (std::filesystem::is_directory(child)) {
 			walk_directory(child, entries);
 		} else {
-			Entry& entry = entries.emplace_back();
-			entry.name = child.filename().wstring();
-			entry.path = child;
+			append_entry(entries, child);
 		}
 	}
 }
@@ -156,12 +160,16 @@ int main()
 	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f);
 	ui::Theme theme{};
 	theme.default_font = &font;
-	theme.button_color = color_from_hex(0x242222FF);
+
+	theme.widget_color = color_from_hex(0x242222FF);
+	theme.widget_hovered_color = color_from_hex(0x4F4F56FF);
+	theme.widget_pressed_color = color_from_hex(0x37373AFF);
+
 	theme.separator_color = color_from_hex(0x37373AFF);
 	theme.text_color = WHITE;
 	theme.prompt_text_color = color_from_hex(0x9E9E9EFF);
 	theme.item_spacing = 4.0f;
-	theme.frame_padding = Vec2 { 6.0f, 6.0f };
+	theme.frame_padding = Vec2 { 12.0f, 8.0f };
 
 	Color highlight_color = color_from_hex(0xE6A446FF);
 
@@ -173,9 +181,19 @@ int main()
 	ui::initialize(*window);
 	ui::set_theme(theme);
 
+	ui::Options& options = ui::get_options();
+	options.debug_layout = true;
+
 	std::vector<Entry> entries;
 
-	walk_directory("C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs", entries);
+	try {
+		std::vector<std::filesystem::path> known_folders = get_start_menu_folder_path();
+		for (const auto& known_folder : known_folders) {
+			walk_directory(known_folder, entries);
+		}
+	} catch (std::exception e) {
+		std::cout << e.what() << '\n';
+	}
 
 	std::vector<ResultEntry> matches;
 	std::vector<RangeU32> highlights;
@@ -202,6 +220,9 @@ int main()
 					case KeyCode::ArrowDown:
 						selected_result_entry = (selected_result_entry + 1) % matches.size();
 						break;
+					case KeyCode::Enter:
+						std::wcout << entries[matches[selected_result_entry].entry_index].path << '\n';
+						break;
 					}
 				}
 				break;
@@ -222,6 +243,11 @@ int main()
 			update_search_result(search_pattern, entries, matches, highlights);
 
 			selected_result_entry = 0;
+		}
+
+		if (ui::button(L"Clear")) {
+			input_state.text_length = 0;
+			update_search_result(L"", entries, matches, highlights);
 		}
 
 		ui::separator();

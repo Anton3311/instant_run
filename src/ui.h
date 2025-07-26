@@ -21,11 +21,14 @@ enum class SizeConstraint {
 struct Theme {
 	const Font* default_font;
 
-	Color button_color;
 	Color text_color;
 	Color prompt_text_color;
 
 	Color separator_color;
+
+	Color widget_color;
+	Color widget_hovered_color;
+	Color widget_pressed_color;
 
 	float item_spacing;
 	Vec2 frame_padding;
@@ -42,6 +45,7 @@ void initialize(const Window& window);
 void begin_frame();
 void end_frame();
 
+const Theme& get_theme();
 void set_theme(const Theme& theme);
 Options& get_options();
 

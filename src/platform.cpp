@@ -74,12 +74,26 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 		return nullptr;
 	}
 
+	int32_t window_x = CW_USEDEFAULT;
+	int32_t window_y = CW_USEDEFAULT;
+
+	{
+		RECT monitor_work_area{};
+		if (SystemParametersInfoA(SPI_GETWORKAREA, 0, &monitor_work_area, 0)) {
+			uint32_t work_area_width = monitor_work_area.right - monitor_work_area.left;
+			uint32_t work_area_height = monitor_work_area.bottom - monitor_work_area.top;
+
+			window_x = monitor_work_area.left + (work_area_width - width) / 2;
+			window_y = monitor_work_area.top + (work_area_height - height) / 2;
+		}
+	}
+
 	window->handle = CreateWindowExW(0,
 		WINDOW_CLASS_NAME,
 		window->title.c_str(),
 		WS_OVERLAPPEDWINDOW,
-		CW_USEDEFAULT,
-		CW_USEDEFAULT,
+		window_x,
+		window_y,
 		static_cast<int>(window->width),
 		static_cast<int>(window->height),
 		nullptr,

@@ -182,7 +182,6 @@ int main()
 	ui::set_theme(theme);
 
 	ui::Options& options = ui::get_options();
-	options.debug_layout = true;
 
 	std::vector<Entry> entries;
 
@@ -222,6 +221,9 @@ int main()
 						break;
 					case KeyCode::Enter:
 						std::wcout << entries[matches[selected_result_entry].entry_index].path << '\n';
+						break;
+					case KeyCode::F3:
+						options.debug_layout = !options.debug_layout;
 						break;
 					}
 				}

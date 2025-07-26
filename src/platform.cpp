@@ -349,6 +349,9 @@ bool translate_key_code(WPARAM virtual_key_code, KeyCode& output) {
 	case VK_RIGHT:
 		output = KeyCode::ArrowRight;
 		return true;
+	case VK_F3:
+		output = KeyCode::F3;
+		return true;
 	}
 
 	return false;

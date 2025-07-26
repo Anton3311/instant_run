@@ -41,6 +41,8 @@ enum class KeyCode {
 	ArrowDown,
 	ArrowLeft,
 	ArrowRight,
+
+	F3,
 };
 
 struct WindowEvent {

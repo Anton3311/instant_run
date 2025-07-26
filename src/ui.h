@@ -70,6 +70,7 @@ bool is_item_hovered();
 Rect get_item_bounds();
 Vec2 get_item_size();
 Vec2 get_cursor();
+void append_item_spacing(float spacing);
 void set_cursor(Vec2 position);
 
 bool is_mouse_button_pressed(MouseButton button);

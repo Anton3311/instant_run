@@ -97,6 +97,17 @@ Vec2 get_cursor() {
 	return s_ui_state.layout.cursor;
 }
 
+void append_item_spacing(float spacing) {
+	switch (s_ui_state.layout.kind) {
+	case LayoutKind::Vertical:
+		s_ui_state.layout.cursor.y += spacing;
+		break;
+	case LayoutKind::Horizontal:
+		s_ui_state.layout.cursor.x += spacing;
+		break;
+	}
+}
+
 void set_cursor(Vec2 position) {
 	s_ui_state.layout.cursor = position;
 }

@@ -188,6 +188,18 @@ EntryAction draw_result_entry(const ResultEntry& match,
 
 	ui::begin_horizontal_layout(&layout_config);
 
+	{
+		// Icon
+		
+		float icon_size = theme.default_font->size;
+		
+		ui::add_item(Vec2 { icon_size, icon_size });
+
+		draw_rounded_rect(ui::get_item_bounds(), WHITE, theme.frame_corner_radius);
+
+		ui::append_item_spacing(theme.default_layout_config.item_spacing * 2.0f);
+	}
+
 	uint32_t cursor = 0;
 	for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
 		RangeU32 highlight_range = state.highlights[i];

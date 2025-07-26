@@ -77,13 +77,21 @@ void add_item(Vec2 size) {
 	layout.bounds = combine_rects(layout.bounds, s_ui_state.last_item.bounds);
 }
 
-bool is_item_hoevered() {
+bool is_item_hovered() {
 	return rect_contains_point(s_ui_state.last_item.bounds, s_ui_state.mouse_position);
+}
+
+Rect get_item_bounds() {
+	return s_ui_state.last_item.bounds;
 }
 
 Vec2 get_item_size() {
 	Rect bounds = s_ui_state.last_item.bounds;
 	return bounds.max - bounds.min;
+}
+
+Vec2 get_cursor() {
+	return s_ui_state.layout.cursor;
 }
 
 void set_cursor(Vec2 position) {
@@ -101,6 +109,11 @@ float get_available_layout_space() {
 	}
 
 	return 0.0f;
+}
+
+Vec2 get_available_layout_region_size() {
+	UVec2 window_size = get_window_framebuffer_size(s_ui_state.window);
+	return Vec2 { static_cast<float>(window_size.x), static_cast<float>(window_size.y) } - s_ui_state.layout.cursor;
 }
 
 void push_next_item_fixed_size(float fixed_size) {
@@ -191,7 +204,7 @@ bool button(std::wstring_view text) {
 	add_item(button_size);
 	Rect item_bounds = s_ui_state.last_item.bounds;
 
-	bool hovered = is_item_hoevered();
+	bool hovered = is_item_hovered();
 	bool pressed = s_ui_state.mouse_button_states[(size_t)MouseButton::Left] == MouseButtonState::Pressed;
 
 	Color button_color = s_ui_state.theme.widget_color;

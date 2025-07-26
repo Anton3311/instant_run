@@ -144,6 +144,73 @@ void update_search_result(std::wstring_view search_pattern,
 	});
 }
 
+float compute_result_view_item_height() {
+	const ui::Theme& theme = ui::get_theme();
+	return theme.default_font->size + theme.frame_padding.y * 2.0f;
+}
+
+void draw_result_entry(const ResultEntry& match,
+		const Entry& entry,
+		const ResultViewState& state,
+		Color text_color,
+		Color highlight_color) {
+	const ui::Theme& theme = ui::get_theme();
+
+	Vec2 available_region = ui::get_available_layout_region_size();
+	Vec2 widget_size = Vec2 { available_region.x, compute_result_view_item_height() } + theme.frame_padding * 2.0f;
+
+	ui::add_item(widget_size);
+
+	Rect item_bounds = ui::get_item_bounds();
+
+	{
+		bool hovered = ui::is_item_hovered();
+
+		Color widget_color = theme.widget_color;
+		if (hovered) {
+			widget_color = theme.widget_hovered_color;
+		}
+
+		draw_rect(item_bounds, widget_color);
+	}
+
+	Vec2 saved_cursor = ui::get_cursor();
+	ui::set_cursor(item_bounds.min + theme.frame_padding);
+
+	ui::begin_horizontal_layout();
+	ui::set_layout_item_spacing(0.0f);
+
+	uint32_t cursor = 0;
+	for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
+		RangeU32 highlight_range = state.highlights[i];
+
+		if (cursor != highlight_range.start) {
+			std::wstring_view t = std::wstring_view(entry.name)
+				.substr(cursor, highlight_range.start - cursor);
+
+			ui::colored_text(t, text_color);
+		}
+
+		std::wstring_view highlighted_text = std::wstring_view(entry.name)
+			.substr(highlight_range.start, highlight_range.count);
+
+		ui::colored_text(highlighted_text, highlight_color);
+
+		cursor = highlight_range.start + highlight_range.count;
+	}
+
+	if (cursor < entry.name.length()) {
+		std::wstring_view t = std::wstring_view(entry.name)
+			.substr(cursor);
+
+		ui::colored_text(t, text_color);
+	}
+
+	ui::end_horizontal_layout();
+
+	ui::set_cursor(saved_cursor);
+}
+
 void append_entry(std::vector<Entry>& entries, const std::filesystem::path& path) {
 	Entry& entry = entries.emplace_back();
 	entry.name = path.filename().replace_extension("").wstring();
@@ -284,7 +351,7 @@ int main()
 		ui::separator();
 
 		float available_height = ui::get_available_layout_space();
-		float item_height = font.size;
+		float item_height = compute_result_view_item_height();
 
 		result_view_state.visible_item_count = std::ceil(available_height / (item_height + theme.item_spacing));
 
@@ -302,38 +369,7 @@ int main()
 
 			Color text_color = is_selected ? Color { 0, 255, 0, 255 } : WHITE;
 
-			{
-				ui::begin_horizontal_layout();
-				ui::set_layout_item_spacing(0.0f);
-
-				uint32_t cursor = 0;
-				for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
-					RangeU32 highlight_range = result_view_state.highlights[i];
-
-					if (cursor != highlight_range.start) {
-						std::wstring_view t = std::wstring_view(entry.name)
-							.substr(cursor, highlight_range.start - cursor);
-
-						ui::colored_text(t, text_color);
-					}
-
-					std::wstring_view highlighted_text = std::wstring_view(entry.name)
-						.substr(highlight_range.start, highlight_range.count);
-
-					ui::colored_text(highlighted_text, highlight_color);
-
-					cursor = highlight_range.start + highlight_range.count;
-				}
-
-				if (cursor < entry.name.length()) {
-					std::wstring_view t = std::wstring_view(entry.name)
-						.substr(cursor);
-
-					ui::colored_text(t, text_color);
-				}
-
-				ui::end_horizontal_layout();
-			}
+			draw_result_entry(match, entry, result_view_state, text_color, highlight_color);
 		}
 
 		ui::end_vertical_layout();

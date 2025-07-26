@@ -56,11 +56,14 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text);
 //
 
 void add_item(Vec2 size);
-bool is_item_hoevered();
+bool is_item_hovered();
+Rect get_item_bounds();
 Vec2 get_item_size();
+Vec2 get_cursor();
 void set_cursor(Vec2 position);
 
 float get_available_layout_space();
+Vec2 get_available_layout_region_size();
 
 void push_next_item_fixed_size(float fixed_size);
 

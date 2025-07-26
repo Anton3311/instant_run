@@ -157,7 +157,7 @@ void draw_result_entry(const ResultEntry& match,
 	const ui::Theme& theme = ui::get_theme();
 
 	Vec2 available_region = ui::get_available_layout_region_size();
-	Vec2 widget_size = Vec2 { available_region.x, compute_result_view_item_height() } + theme.frame_padding * 2.0f;
+	Vec2 widget_size = Vec2 { available_region.x, compute_result_view_item_height() };
 
 	ui::add_item(widget_size);
 
@@ -178,7 +178,6 @@ void draw_result_entry(const ResultEntry& match,
 	ui::set_cursor(item_bounds.min + theme.frame_padding);
 
 	ui::LayoutConfig layout_config{};
-	layout_config.padding = theme.frame_padding;
 
 	ui::begin_horizontal_layout(&layout_config);
 

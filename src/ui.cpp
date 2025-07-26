@@ -351,12 +351,14 @@ void text(std::wstring_view text) {
 static constexpr float SEPARATOR_THICKNESS = 2.0f;
 
 void separator() {
+	Vec2 available_space = get_available_layout_region_size();
+
 	switch (s_ui_state.layout.kind) {
 	case LayoutKind::Vertical:
-		add_item(Vec2 { s_ui_state.layout.bounds.width(), SEPARATOR_THICKNESS });
+		add_item(Vec2 { available_space.x, SEPARATOR_THICKNESS });
 		break;
 	case LayoutKind::Horizontal:
-		add_item(Vec2 { SEPARATOR_THICKNESS, s_ui_state.layout.bounds.height() });
+		add_item(Vec2 { SEPARATOR_THICKNESS, available_space.y });
 		break;
 	}
 

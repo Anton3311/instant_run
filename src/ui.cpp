@@ -20,7 +20,7 @@ struct LayoutState {
 	LayoutKind kind;
 	Rect bounds;
 	Vec2 cursor;
-	float item_spacing;
+	LayoutConfig config;
 
 	SizeConstraint next_item_size_constraint;
 	float next_item_fixed_size;
@@ -67,14 +67,17 @@ void add_item(Vec2 size) {
 
 	switch (layout.kind) {
 	case LayoutKind::Vertical:
-		layout.cursor.y += size.y + layout.item_spacing;
+		layout.cursor.y += size.y + layout.config.item_spacing;
 		break;
 	case LayoutKind::Horizontal:
-		layout.cursor.x += size.x + layout.item_spacing;
+		layout.cursor.x += size.x + layout.config.item_spacing;
 		break;
 	}
 
-	layout.bounds = combine_rects(layout.bounds, s_ui_state.last_item.bounds);
+	Rect padded_item_rect = s_ui_state.last_item.bounds;
+	padded_item_rect.max += layout.config.padding;
+
+	layout.bounds = combine_rects(layout.bounds, padded_item_rect);
 }
 
 bool is_item_hovered() {
@@ -101,11 +104,13 @@ void set_cursor(Vec2 position) {
 float get_available_layout_space() {
 	UVec2 window_size = get_window_framebuffer_size(s_ui_state.window);
 
+	const LayoutState& layout = s_ui_state.layout;
+
 	switch (s_ui_state.layout.kind) {
 	case LayoutKind::Vertical:
-		return static_cast<float>(window_size.y) - s_ui_state.layout.cursor.y;
+		return static_cast<float>(window_size.y) - layout.cursor.y - layout.config.padding.y;
 	case LayoutKind::Horizontal:
-		return static_cast<float>(window_size.x) - s_ui_state.layout.cursor.x;
+		return static_cast<float>(window_size.x) - layout.cursor.x - layout.config.padding.x;
 	}
 
 	return 0.0f;
@@ -113,7 +118,9 @@ float get_available_layout_space() {
 
 Vec2 get_available_layout_region_size() {
 	UVec2 window_size = get_window_framebuffer_size(s_ui_state.window);
-	return Vec2 { static_cast<float>(window_size.x), static_cast<float>(window_size.y) } - s_ui_state.layout.cursor;
+	return Vec2 { static_cast<float>(window_size.x), static_cast<float>(window_size.y) }
+		- s_ui_state.layout.cursor
+		- s_ui_state.layout.config.padding;
 }
 
 void push_next_item_fixed_size(float fixed_size) {
@@ -151,6 +158,12 @@ void begin_frame() {
 			break;
 		}
 	}
+
+	UVec2 window_size = get_window_framebuffer_size(s_ui_state.window);
+	float window_width = static_cast<float>(window_size.x);
+	float window_height = static_cast<float>(window_size.y);
+
+	draw_rect(Rect { Vec2 { 0.0f, 0.0f }, Vec2 { window_width, window_height } }, s_ui_state.theme.window_background);
 }
 
 void end_frame() {
@@ -357,6 +370,7 @@ void separator() {
 
 static void pop_layout() {
 	Rect current_layout_bounds = s_ui_state.layout.bounds;
+	LayoutConfig prev_layout_config = s_ui_state.layout.config;
 
 	s_ui_state.layout = s_ui_state.layout_stack.back();
 	s_ui_state.layout_stack.pop_back();
@@ -365,22 +379,35 @@ static void pop_layout() {
 
 	if (s_ui_state.options.debug_layout) {
 		draw_rect_lines(current_layout_bounds, Color { 255, 0, 255, 255 });
+
+		draw_rect_lines(current_layout_bounds, Color { 255, 0, 255, 255 });
+
+		if (prev_layout_config.padding != Vec2{}) {
+			Rect inner_rect = current_layout_bounds;
+			inner_rect.min += prev_layout_config.padding;
+			inner_rect.max -= prev_layout_config.padding;
+			draw_rect_lines(inner_rect, Color { 128, 0, 128, 255 });
+		}
 	}
 }
 
 void set_layout_item_spacing(float item_spacing) {
-	s_ui_state.layout.item_spacing = item_spacing;
+	s_ui_state.layout.config.item_spacing = item_spacing;
 }
 
-void begin_vertical_layout() {
+void begin_vertical_layout(const LayoutConfig* config) {
 	s_ui_state.layout_stack.push_back(s_ui_state.layout);
+
+	if (config == nullptr) {
+		config = &s_ui_state.theme.default_layout_config;
+	}
 	
 	Vec2 cursor = s_ui_state.layout.cursor;
 	s_ui_state.layout = LayoutState {
 		.kind = LayoutKind::Vertical,
-		.bounds = Rect{ cursor, cursor },
-		.cursor = cursor,
-		.item_spacing = s_ui_state.theme.item_spacing
+		.bounds = Rect{ cursor, cursor + config->padding * 2.0f },
+		.cursor = cursor + config->padding,
+		.config = *config
 	};
 }
 
@@ -388,15 +415,19 @@ void end_vertical_layout() {
 	pop_layout();
 }
 
-void begin_horizontal_layout() {
+void begin_horizontal_layout(const LayoutConfig* config) {
 	s_ui_state.layout_stack.push_back(s_ui_state.layout);
+
+	if (config == nullptr) {
+		config = &s_ui_state.theme.default_layout_config;
+	}
 
 	Vec2 cursor = s_ui_state.layout.cursor;
 	s_ui_state.layout = LayoutState {
 		.kind = LayoutKind::Horizontal,
-		.bounds = Rect{ cursor, cursor },
-		.cursor = cursor,
-		.item_spacing = s_ui_state.theme.item_spacing
+		.bounds = Rect{ cursor, cursor + config->padding * 2.0f },
+		.cursor = cursor + config->padding,
+		.config = *config
 	};
 }
 

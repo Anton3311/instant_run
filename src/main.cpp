@@ -177,8 +177,10 @@ void draw_result_entry(const ResultEntry& match,
 	Vec2 saved_cursor = ui::get_cursor();
 	ui::set_cursor(item_bounds.min + theme.frame_padding);
 
-	ui::begin_horizontal_layout();
-	ui::set_layout_item_spacing(0.0f);
+	ui::LayoutConfig layout_config{};
+	layout_config.padding = theme.frame_padding;
+
+	ui::begin_horizontal_layout(&layout_config);
 
 	uint32_t cursor = 0;
 	for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
@@ -265,6 +267,8 @@ int main()
 	ui::Theme theme{};
 	theme.default_font = &font;
 
+	theme.window_background = color_from_hex(0x242222FF);
+
 	theme.widget_color = color_from_hex(0x242222FF);
 	theme.widget_hovered_color = color_from_hex(0x4F4F56FF);
 	theme.widget_pressed_color = color_from_hex(0x37373AFF);
@@ -272,7 +276,8 @@ int main()
 	theme.separator_color = color_from_hex(0x37373AFF);
 	theme.text_color = WHITE;
 	theme.prompt_text_color = color_from_hex(0x9E9E9EFF);
-	theme.item_spacing = 4.0f;
+	theme.default_layout_config.item_spacing = 4.0f;
+	theme.default_layout_config.padding = Vec2 { 12.0f, 12.0f };
 	theme.frame_padding = Vec2 { 12.0f, 8.0f };
 
 	Color highlight_color = color_from_hex(0xE6A446FF);
@@ -332,8 +337,7 @@ int main()
 		ui::begin_frame();
 		ui::begin_vertical_layout();
 
-		float text_field_width = static_cast<float>(get_window_framebuffer_size(window).x);
-
+		float text_field_width = ui::get_available_layout_region_size().x;
 		ui::push_next_item_fixed_size(text_field_width);
 
 		if (ui::text_input(input_state, L"Search ...")) {
@@ -351,9 +355,9 @@ int main()
 		ui::separator();
 
 		float available_height = ui::get_available_layout_space();
-		float item_height = compute_result_view_item_height();
+		float item_height = compute_result_view_item_height() + theme.default_layout_config.item_spacing;
 
-		result_view_state.visible_item_count = std::ceil(available_height / (item_height + theme.item_spacing));
+		result_view_state.visible_item_count = std::ceil(available_height / item_height);
 
 		update_result_view_scroll(result_view_state);
 

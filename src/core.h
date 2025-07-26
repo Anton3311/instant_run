@@ -45,6 +45,20 @@ struct Vec2 {
 		return *this;
 	}
 
+	inline Vec2& operator-=(Vec2 other) {
+		x -= other.x;
+		y -= other.y;
+		return *this;
+	}
+
+	inline bool operator==(Vec2 other) const {
+		return x == other.x && y == other.y;
+	}
+
+	inline bool operator!=(Vec2 other) const {
+		return x != other.x || y != other.y;
+	}
+
 	float x;
 	float y;
 };

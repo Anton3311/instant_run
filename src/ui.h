@@ -18,8 +18,15 @@ enum class SizeConstraint {
 	Fixed,
 };
 
+struct LayoutConfig {
+	float item_spacing;
+	Vec2 padding;
+};
+
 struct Theme {
 	const Font* default_font;
+
+	Color window_background;
 
 	Color text_color;
 	Color prompt_text_color;
@@ -30,7 +37,8 @@ struct Theme {
 	Color widget_hovered_color;
 	Color widget_pressed_color;
 
-	float item_spacing;
+	LayoutConfig default_layout_config;
+
 	Vec2 frame_padding;
 };
 
@@ -85,10 +93,10 @@ void separator();
 
 void set_layout_item_spacing(float item_spacing);
 
-void begin_vertical_layout();
+void begin_vertical_layout(const LayoutConfig* config = nullptr);
 void end_vertical_layout();
 
-void begin_horizontal_layout();
+void begin_horizontal_layout(const LayoutConfig* config = nullptr);
 void end_horizontal_layout();
 
 }

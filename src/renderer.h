@@ -46,5 +46,6 @@ void end_frame();
 
 void draw_line(Vec2 a, Vec2 b, Color color);
 void draw_rect(const Rect& rect, Color color);
+void draw_rounded_rect(const Rect& rect, Color color, float corner_radius);
 void draw_rect_lines(const Rect& rect, Color color);
 void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color color);

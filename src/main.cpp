@@ -178,7 +178,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 			widget_color = theme.widget_hovered_color;
 		}
 
-		draw_rect(item_bounds, widget_color);
+		draw_rounded_rect(item_bounds, widget_color, theme.frame_corner_radius);
 	}
 
 	Vec2 saved_cursor = ui::get_cursor();
@@ -291,6 +291,7 @@ int main()
 	theme.default_layout_config.item_spacing = 4.0f;
 	theme.default_layout_config.padding = Vec2 { 12.0f, 12.0f };
 	theme.frame_padding = Vec2 { 12.0f, 8.0f };
+	theme.frame_corner_radius = 4.0f;
 
 	Color highlight_color = color_from_hex(0xE6A446FF);
 

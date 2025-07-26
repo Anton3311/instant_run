@@ -40,6 +40,7 @@ struct Theme {
 
 	LayoutConfig default_layout_config;
 
+	float frame_corner_radius;
 	Vec2 frame_padding;
 };
 

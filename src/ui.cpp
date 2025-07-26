@@ -231,7 +231,7 @@ bool button(std::wstring_view text) {
 		button_color = s_ui_state.theme.widget_hovered_color;
 	}
 
-	draw_rect(item_bounds, button_color);
+	draw_rounded_rect(item_bounds, button_color, s_ui_state.theme.frame_corner_radius);
 	draw_text(text,
 			item_bounds.min + s_ui_state.theme.frame_padding,
 			*s_ui_state.theme.default_font,

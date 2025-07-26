@@ -59,6 +59,10 @@ struct Vec2 {
 		return x != other.x || y != other.y;
 	}
 
+	inline Vec2 operator-() const {
+		return Vec2 { -x, -y };
+	}
+
 	float x;
 	float y;
 };

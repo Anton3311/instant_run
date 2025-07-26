@@ -6,6 +6,10 @@
 #include <vector>
 #include <fstream>
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+#include <math.h>
+
 #include "platform.h"
 
 struct QuadVertex {
@@ -19,6 +23,8 @@ struct DrawCommand {
 	uint32_t index_count;
 	uint32_t texture_id;
 };
+
+static constexpr uint32_t ROUNDED_CORNER_VERTEX_COUNT = 3;
 
 struct RendererState {
 	Window* window;
@@ -34,6 +40,8 @@ struct RendererState {
 	std::vector<DrawCommand> commands;
 
 	Texture white_texture;
+
+	Vec2 rounded_corner_vertices[ROUNDED_CORNER_VERTEX_COUNT];
 };
 
 static RendererState s_state;
@@ -248,6 +256,15 @@ void initialize_renderer(Window* window) {
 
 		s_state.white_texture = create_texture(TextureFormat::R8_G8_B8_A8, 1, 1, pixels);
 	}
+
+	{
+		float angle_step = M_PI / (2.0f * ((float)ROUNDED_CORNER_VERTEX_COUNT - 1));
+
+		for (size_t i = 0; i < ROUNDED_CORNER_VERTEX_COUNT; i++) {
+			float angle = angle_step * (float)i;
+			s_state.rounded_corner_vertices[i] = Vec2 { std::cos(angle), std::sin(angle) };
+		}
+	}
 }
 
 void shutdown_renderer() {
@@ -452,7 +469,73 @@ void draw_rect(const Rect& rect, Color color) {
 	command.index_count += 6;
 }
 
+void draw_rounded_rect(const Rect& rect, Color color, float corner_radius) {
+	if (color.a == 0) {
+		return;
+	}
+
+	if (corner_radius == 0.0f) {
+		draw_rect(rect, color);
+		return;
+	}
+
+	push_texture(s_state.white_texture);
+
+	uint32_t vertex_offset = static_cast<uint32_t>(s_state.vertices.size());
+	uint32_t color32 = color_to_uint32(color);
+
+	Vec2 radius_vector = Vec2 { corner_radius, corner_radius };
+
+	Vec2 top_left_origin = rect.min + radius_vector;
+	Vec2 top_right_origin = Vec2 { rect.max.x, rect.min.y } + Vec2 { -corner_radius, corner_radius };
+	Vec2 bottom_left_origin = Vec2 { rect.min.x, rect.max.y } + Vec2 { corner_radius, -corner_radius };
+	Vec2 bottom_right_origin = rect.max - radius_vector;
+
+	size_t vertex_count = ROUNDED_CORNER_VERTEX_COUNT * 4;
+
+	// top left
+	for (size_t i = 0; i < ROUNDED_CORNER_VERTEX_COUNT; i++) {
+		Vec2 offset = s_state.rounded_corner_vertices[i] * corner_radius;
+		offset.x = -offset.x;
+		offset.y = -offset.y;
+		s_state.vertices.push_back(QuadVertex { top_left_origin + offset, Vec2{}, color32 });
+	}
+
+	// top right
+	for (size_t i = 0; i < ROUNDED_CORNER_VERTEX_COUNT; i++) {
+		Vec2 offset = s_state.rounded_corner_vertices[ROUNDED_CORNER_VERTEX_COUNT - i - 1] * corner_radius;
+		offset.y = -offset.y;
+		s_state.vertices.push_back(QuadVertex { top_right_origin + offset, Vec2{}, color32 });
+	}
+
+	// bottom right
+	for (size_t i = 0; i < ROUNDED_CORNER_VERTEX_COUNT; i++) {
+		Vec2 offset = s_state.rounded_corner_vertices[i] * corner_radius;
+		s_state.vertices.push_back(QuadVertex { bottom_right_origin + offset, Vec2{}, color32 });
+	}
+
+	// bottom left
+	for (size_t i = 0; i < ROUNDED_CORNER_VERTEX_COUNT; i++) {
+		Vec2 offset = s_state.rounded_corner_vertices[ROUNDED_CORNER_VERTEX_COUNT - i -1] * corner_radius;
+		offset.x = -offset.x;
+		s_state.vertices.push_back(QuadVertex { bottom_left_origin + offset, Vec2{}, color32 });
+	}
+
+	for (size_t i = 0; i < vertex_count - 2; i++) {
+		s_state.indices.push_back(vertex_offset);
+		s_state.indices.push_back(vertex_offset + i + 1);
+		s_state.indices.push_back(vertex_offset + i + 2);
+	}
+
+	DrawCommand& command = s_state.commands.back();
+	command.index_count += (vertex_count - 2) * 3;
+}
+
 void draw_rect_lines(const Rect& rect, Color color) {
+	if (color.a == 0) {
+		return;
+	}
+
 	Vec2 top_right = Vec2 { rect.max.x, rect.min.y };
 	Vec2 bottom_left = Vec2 { rect.min.x, rect.max.y };
 
@@ -463,6 +546,10 @@ void draw_rect_lines(const Rect& rect, Color color) {
 }
 
 void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color color) {
+	if (color.a == 0) {
+		return;
+	}
+
 	push_texture(font.atlas);
 
 	uint32_t color_value = color_to_uint32(color);

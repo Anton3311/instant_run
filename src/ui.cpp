@@ -101,6 +101,10 @@ void set_cursor(Vec2 position) {
 	s_ui_state.layout.cursor = position;
 }
 
+bool is_mouse_button_pressed(MouseButton button) {
+	return s_ui_state.mouse_button_states[(size_t)button] == MouseButtonState::Pressed;
+}
+
 float get_available_layout_space() {
 	UVec2 window_size = get_window_framebuffer_size(s_ui_state.window);
 

@@ -4,6 +4,7 @@
 
 #include "core.h"
 #include "renderer.h"
+#include "platform.h"
 
 struct Window;
 
@@ -69,6 +70,8 @@ Rect get_item_bounds();
 Vec2 get_item_size();
 Vec2 get_cursor();
 void set_cursor(Vec2 position);
+
+bool is_mouse_button_pressed(MouseButton button);
 
 float get_available_layout_space();
 Vec2 get_available_layout_region_size();

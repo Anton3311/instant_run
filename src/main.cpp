@@ -149,7 +149,12 @@ float compute_result_view_item_height() {
 	return theme.default_font->size + theme.frame_padding.y * 2.0f;
 }
 
-void draw_result_entry(const ResultEntry& match,
+enum class EntryAction {
+	None,
+	Launch,
+};
+
+EntryAction draw_result_entry(const ResultEntry& match,
 		const Entry& entry,
 		const ResultViewState& state,
 		bool is_selected,
@@ -163,8 +168,10 @@ void draw_result_entry(const ResultEntry& match,
 
 	Rect item_bounds = ui::get_item_bounds();
 
+	bool hovered = ui::is_item_hovered();
+	bool pressed = hovered && ui::is_mouse_button_pressed(MouseButton::Left);
+
 	{
-		bool hovered = ui::is_item_hovered();
 
 		Color widget_color = theme.widget_color;
 		if (hovered || is_selected) {
@@ -210,6 +217,12 @@ void draw_result_entry(const ResultEntry& match,
 	ui::end_horizontal_layout();
 
 	ui::set_cursor(saved_cursor);
+
+	if (pressed) {
+		return EntryAction::Launch;
+	}
+
+	return EntryAction::None;
 }
 
 void append_entry(std::vector<Entry>& entries, const std::filesystem::path& path) {
@@ -370,7 +383,11 @@ int main()
 			const ResultEntry& match = result_view_state.matches[i];
 			const Entry& entry = entries[match.entry_index];
 
-			draw_result_entry(match, entry, result_view_state, is_selected, highlight_color);
+			EntryAction action = draw_result_entry(match, entry, result_view_state, is_selected, highlight_color);
+
+			if (action == EntryAction::Launch) {
+				std::wcout << "Launch " << entry.path.wstring() << '\n';
+			}
 		}
 
 		ui::end_vertical_layout();

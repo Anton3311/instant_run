@@ -228,6 +228,7 @@ int main()
 
 			{
 				ui::begin_horizontal_layout();
+				ui::set_layout_item_spacing(0.0f);
 
 				uint32_t cursor = 0;
 				for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {

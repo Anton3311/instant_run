@@ -9,6 +9,10 @@ struct Window;
 
 namespace ui {
 
+struct Options {
+	bool debug_layout;
+};
+
 struct Theme {
 	const Font* default_font;
 
@@ -31,6 +35,7 @@ void begin_frame();
 void end_frame();
 
 void set_theme(const Theme& theme);
+Options& get_options();
 
 Vec2 compute_text_size(const Font& font, std::wstring_view text);
 
@@ -56,6 +61,8 @@ void text(std::wstring_view text);
 //
 // Layout
 //
+
+void set_layout_item_spacing(float item_spacing);
 
 void begin_vertical_layout();
 void end_vertical_layout();

@@ -20,6 +20,7 @@ struct LayoutState {
 	LayoutKind kind;
 	Rect bounds;
 	Vec2 cursor;
+	float item_spacing;
 	bool has_item;
 };
 
@@ -32,6 +33,7 @@ enum class MouseButtonState {
 struct State {
 	const Window* window;
 	Theme theme;
+	Options options;
 
 	Vec2 cursor;
 	
@@ -58,22 +60,23 @@ void initialize(const Window& window) {
 }
 
 void add_item(Vec2 size) {
-	s_ui_state.last_item.bounds = Rect { s_ui_state.layout.cursor, s_ui_state.layout.cursor + size };
+	LayoutState& layout = s_ui_state.layout;
+	s_ui_state.last_item.bounds = Rect { layout.cursor, layout.cursor + size };
 
-	switch (s_ui_state.layout.kind) {
+	switch (layout.kind) {
 	case LayoutKind::Vertical:
-		s_ui_state.layout.cursor.y += size.y + s_ui_state.theme.item_spacing;
+		layout.cursor.y += size.y + layout.item_spacing;
 		break;
 	case LayoutKind::Horizontal:
-		s_ui_state.layout.cursor.x += size.x + s_ui_state.theme.item_spacing;
+		layout.cursor.x += size.x + layout.item_spacing;
 		break;
 	}
 
-	if (s_ui_state.layout.has_item) {
-		s_ui_state.layout.bounds = combine_rects(s_ui_state.layout.bounds, s_ui_state.last_item.bounds);
+	if (layout.has_item) {
+		layout.bounds = combine_rects(layout.bounds, s_ui_state.last_item.bounds);
 	} else {
-		s_ui_state.layout.has_item = true;
-		s_ui_state.layout.bounds = s_ui_state.last_item.bounds;
+		layout.has_item = true;
+		layout.bounds = s_ui_state.last_item.bounds;
 	}
 }
 
@@ -130,6 +133,10 @@ void set_theme(const Theme& theme) {
 	s_ui_state.theme = theme;
 }
 
+Options& get_options() {
+	return s_ui_state.options;
+}
+
 Vec2 compute_text_size(const Font& font, std::wstring_view text) {
 	Vec2 char_position{};
 	float text_width = 0.0f;
@@ -152,7 +159,7 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text) {
 				1);
 
 		Vec2 char_size = Vec2(quad.x1 - quad.x0, quad.y1 - quad.y0);
-		text_width = char_position.x + char_size.x;
+		text_width = char_position.x;
 	}
 
 	return Vec2 { text_width, font.size };
@@ -252,9 +259,9 @@ bool text_input(TextInputState& input_state, float width) {
 void colored_text(std::wstring_view text, Color color) {
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
 
-	Vec2 text_position = s_ui_state.layout.cursor;
-
 	add_item(text_size);
+	Vec2 text_position = s_ui_state.last_item.bounds.min;
+
 	draw_text(text, text_position, *s_ui_state.theme.default_font, color);
 }
 
@@ -274,7 +281,13 @@ static void pop_layout() {
 
 	add_item(current_layout_bounds.max - current_layout_bounds.min);
 
-	draw_rect_lines(current_layout_bounds, Color { 255, 0, 255, 255 });
+	if (s_ui_state.options.debug_layout) {
+		draw_rect_lines(current_layout_bounds, Color { 255, 0, 255, 255 });
+	}
+}
+
+void set_layout_item_spacing(float item_spacing) {
+	s_ui_state.layout.item_spacing = item_spacing;
 }
 
 void begin_vertical_layout() {
@@ -284,7 +297,8 @@ void begin_vertical_layout() {
 	s_ui_state.layout = LayoutState {
 		.kind = LayoutKind::Vertical,
 		.bounds = Rect{},
-		.cursor = cursor
+		.cursor = cursor,
+		.item_spacing = s_ui_state.theme.item_spacing
 	};
 }
 
@@ -299,7 +313,8 @@ void begin_horizontal_layout() {
 	s_ui_state.layout = LayoutState {
 		.kind = LayoutKind::Horizontal,
 		.bounds = Rect{},
-		.cursor = cursor
+		.cursor = cursor,
+		.item_spacing = s_ui_state.theme.item_spacing
 	};
 }
 

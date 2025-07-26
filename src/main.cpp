@@ -152,7 +152,7 @@ float compute_result_view_item_height() {
 void draw_result_entry(const ResultEntry& match,
 		const Entry& entry,
 		const ResultViewState& state,
-		Color text_color,
+		bool is_selected,
 		Color highlight_color) {
 	const ui::Theme& theme = ui::get_theme();
 
@@ -167,7 +167,7 @@ void draw_result_entry(const ResultEntry& match,
 		bool hovered = ui::is_item_hovered();
 
 		Color widget_color = theme.widget_color;
-		if (hovered) {
+		if (hovered || is_selected) {
 			widget_color = theme.widget_hovered_color;
 		}
 
@@ -189,7 +189,7 @@ void draw_result_entry(const ResultEntry& match,
 			std::wstring_view t = std::wstring_view(entry.name)
 				.substr(cursor, highlight_range.start - cursor);
 
-			ui::colored_text(t, text_color);
+			ui::text(t);
 		}
 
 		std::wstring_view highlighted_text = std::wstring_view(entry.name)
@@ -204,7 +204,7 @@ void draw_result_entry(const ResultEntry& match,
 		std::wstring_view t = std::wstring_view(entry.name)
 			.substr(cursor);
 
-		ui::colored_text(t, text_color);
+		ui::text(t);
 	}
 
 	ui::end_horizontal_layout();
@@ -370,9 +370,7 @@ int main()
 			const ResultEntry& match = result_view_state.matches[i];
 			const Entry& entry = entries[match.entry_index];
 
-			Color text_color = is_selected ? Color { 0, 255, 0, 255 } : WHITE;
-
-			draw_result_entry(match, entry, result_view_state, text_color, highlight_color);
+			draw_result_entry(match, entry, result_view_state, is_selected, highlight_color);
 		}
 
 		ui::end_vertical_layout();

@@ -57,6 +57,15 @@ bool is_item_hoevered() {
 	return rect_contains_point(s_ui_state.last_item.bounds, s_ui_state.mouse_position);
 }
 
+void set_cursor(Vec2 position) {
+
+}
+
+Vec2 get_item_size() {
+	Rect bounds = s_ui_state.last_item.bounds;
+	return bounds.max - bounds.min;
+}
+
 void begin_frame() {
 	s_ui_state.cursor = Vec2{};
 	s_ui_state.last_item = {};

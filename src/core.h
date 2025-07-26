@@ -109,3 +109,12 @@ struct Span {
 	T* values;
 	size_t count;
 };
+
+//
+// Range
+//
+
+struct RangeU32 {
+	uint32_t start;
+	uint32_t count;
+};

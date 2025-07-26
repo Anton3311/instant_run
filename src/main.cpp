@@ -15,6 +15,8 @@ struct Entry {
 struct ResultEntry {
 	uint32_t entry_index;
 	uint32_t score;
+
+	RangeU32 highlights;
 };
 
 bool starts_with(std::wstring_view string, std::wstring_view start_pattern) {
@@ -71,12 +73,18 @@ inline wchar_t to_lower_case(wchar_t c) {
 	return c;
 }
 
-uint32_t compute_logest_common_subsequence(const std::wstring_view& string, const std::wstring_view& pattern) {
+uint32_t compute_logest_common_subsequence(
+		const std::wstring_view& string,
+		const std::wstring_view& pattern,
+		std::vector<RangeU32>& sequence_ranges,
+		RangeU32& highlight_range) {
 	if (string.length() < pattern.length()) {
 		return 0;
 	}
 
 	uint32_t result = 0;
+
+	highlight_range.start = static_cast<uint32_t>(sequence_ranges.size());
 
 	for (size_t i = 0; i < (string.length() - pattern.length()); i++) {
 		uint32_t sequence_length = 0;
@@ -89,6 +97,12 @@ uint32_t compute_logest_common_subsequence(const std::wstring_view& string, cons
 			}
 		}
 
+		if (sequence_length > 0) {
+			sequence_ranges.push_back(RangeU32 { static_cast<uint32_t>(i), sequence_length });
+
+			highlight_range.count += 1;
+		}
+
 		result = std::max(result, sequence_length);
 	}
 
@@ -97,14 +111,23 @@ uint32_t compute_logest_common_subsequence(const std::wstring_view& string, cons
 
 void update_search_result(std::wstring_view search_pattern,
 		const std::vector<Entry>& entries,
-		std::vector<ResultEntry>& result) {
+		std::vector<ResultEntry>& result,
+		std::vector<RangeU32>& sequence_ranges) {
 	result.clear();
+	sequence_ranges.clear();
 
 	for (size_t i = 0; i < entries.size(); i++) {
 		const Entry& entry = entries[i];
 
-		uint32_t score = compute_logest_common_subsequence(entry.name, search_pattern);
-		result.push_back({ (uint32_t)i, score });
+		RangeU32 highlight_range{};
+
+		uint32_t score = compute_logest_common_subsequence(
+				entry.name,
+				search_pattern,
+				sequence_ranges,
+				highlight_range);
+
+		result.push_back({ (uint32_t)i, score, highlight_range });
 	}
 
 	std::sort(result.begin(), result.end(), [&](auto a, auto b) -> bool {
@@ -151,9 +174,10 @@ int main()
 	walk_directory("C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs", entries);
 
 	std::vector<ResultEntry> matches;
+	std::vector<RangeU32> highlights;
 	size_t selected_result_entry = 0;
 
-	update_search_result({}, entries, matches);
+	update_search_result({}, entries, matches, highlights);
 
 	while (!window_should_close(window)) {
 		poll_window_events(window);
@@ -185,23 +209,32 @@ int main()
 		ui::begin_frame();
 
 		if (ui::text_input(input_state, 128.0)) {
-			matches.clear();
-
 			std::wstring_view search_pattern(text_buffer, input_state.text_length);
-			update_search_result(search_pattern, entries, matches);
+			update_search_result(search_pattern, entries, matches, highlights);
 
 			selected_result_entry = 0;
 		}
 
+		Color highlight_color = Color { 255, 0, 255, 255 };
+
 		for (size_t i = 0; i < matches.size(); i++) {
 			bool is_selected = i == selected_result_entry;
-			uint32_t score = matches[i].score;
-			const Entry& entry = entries[matches[i].entry_index];
+
+			const ResultEntry& match = matches[i];
+			const Entry& entry = entries[match.entry_index];
 
 			Color text_color = is_selected ? Color { 0, 255, 0, 255 } : WHITE;
 
 			ui::colored_text(entry.name, text_color);
-			ui::colored_text(std::to_wstring(score), text_color);
+		
+			for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
+				RangeU32 highlight_range = highlights[i];
+
+				std::wstring_view highlighted_text = std::wstring_view(entry.name)
+					.substr(highlight_range.start, highlight_range.count);
+
+				ui::colored_text(highlighted_text, highlight_color);
+			}
 		}
 
 		ui::end_frame();

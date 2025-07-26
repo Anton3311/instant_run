@@ -42,6 +42,8 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text);
 void add_item(Rect bounds);
 void add_item(Vec2 size);
 bool is_item_hoevered();
+Vec2 get_item_size();
+void set_cursor(Vec2 position);
 
 //
 // Widgets

@@ -207,6 +207,11 @@ bool text_input(TextInputState& input_state, float width) {
 	draw_rect(bounds, s_ui_state.theme.button_color);
 	draw_text(text, bounds.min + s_ui_state.theme.frame_padding, *s_ui_state.theme.default_font, s_ui_state.theme.text_color);
 
+	Vec2 text_cursor_position = bounds.min + s_ui_state.theme.frame_padding;
+	text_cursor_position.x += text_size.x;
+
+	draw_rect(Rect { text_cursor_position, text_cursor_position + Vec2 { 2.0f, text_size.y } }, WHITE);
+
 	return changed;
 }
 

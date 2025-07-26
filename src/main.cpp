@@ -1,6 +1,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "platform.h"
 #include "renderer.h"
@@ -32,26 +33,31 @@ bool starts_with(std::wstring_view string, std::wstring_view start_pattern) {
 }
 
 uint32_t dp[100][100];
-// FIXME: doesn't work
 uint32_t compute_edit_distance(const std::wstring_view& string, const std::wstring_view& pattern)
 {
-	for (size_t i = 0; i < string.size(); i++)
+	std::memset(dp, 0, sizeof(dp));
+
+	for (size_t i = 0; i <= string.size(); i++)
 		dp[i][0] = i;
 
-	for (size_t i = 0; i < pattern.size(); i++)
+	for (size_t i = 0; i <= pattern.size(); i++)
 		dp[0][i] = i;
 
-	for (size_t i = 1; i <= string.size(); i++)
-	{
-		for (size_t j = 1; j <= pattern.size(); j++)
-		{
-			uint32_t sub_cost = (string[i - 1] == pattern[j - 1]) ? 0 : 1;
+	for (size_t j = 1; j <= pattern.size(); j++) {
+		for (size_t i = 1; i <= string.size(); i++) {
+			uint32_t substitution_cost;
 
-			dp[i][j] = std::min<uint32_t>(
-				dp[i - 1][j] + 1,
-				std::min<uint32_t>(
-					dp[i][j - 1] + 1,
-					dp[i - 1][j - 1] + sub_cost));
+			if (string[i - 1] == pattern[j - 1]) {
+				substitution_cost = 0;
+			} else {
+				substitution_cost = 1;
+			}
+
+			uint32_t deletion = dp[i - 1][j] + 1 + 2;
+			uint32_t insertion = dp[i][j - 1] + 1;
+			uint32_t substitution = dp[i - 1][j - 1] + substitution_cost;
+
+			dp[i][j] = std::min(substitution, std::min(deletion, insertion));
 		}
 	}
 
@@ -89,7 +95,7 @@ void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entri
 
 int main()
 {
-	Window* window = create_window(800, 300, L"Instant Run");
+	Window* window = create_window(800, 500, L"Instant Run");
 
 	initialize_renderer(window);
 
@@ -158,9 +164,13 @@ int main()
 
 		for (size_t i = 0; i < matches.size(); i++) {
 			bool is_selected = i == selected_result_entry;
+			uint32_t score = matches[i].score;
 			const Entry& entry = entries[matches[i].entry_index];
 
-			ui::colored_text(entry.name, is_selected ? Color { 0, 255, 0, 255 } : WHITE);
+			Color text_color = is_selected ? Color { 0, 255, 0, 255 } : WHITE;
+
+			ui::colored_text(entry.name, text_color);
+			ui::colored_text(std::to_wstring(score), text_color);
 		}
 
 		ui::end_frame();

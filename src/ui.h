@@ -18,6 +18,9 @@ struct Theme {
 
 	Color button_color;
 	Color text_color;
+	Color prompt_text_color;
+
+	Color separator_color;
 
 	float item_spacing;
 	Vec2 frame_padding;
@@ -53,10 +56,12 @@ void set_cursor(Vec2 position);
 //
 
 bool button(std::wstring_view text);
-bool text_input(TextInputState& input_state, float width);
+bool text_input(TextInputState& input_state, std::wstring_view prompt = {}); 
 
 void colored_text(std::wstring_view text, Color color);
 void text(std::wstring_view text);
+
+void separator();
 
 //
 // Layout

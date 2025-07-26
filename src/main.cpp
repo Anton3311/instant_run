@@ -153,13 +153,15 @@ int main()
 
 	initialize_renderer(window);
 
-	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 18.0f);
+	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f);
 	ui::Theme theme{};
 	theme.default_font = &font;
-	theme.button_color = Color(100, 100, 100, 255);
+	theme.button_color = color_from_hex(0x242222FF);
+	theme.separator_color = color_from_hex(0x37373AFF);
 	theme.text_color = WHITE;
-	theme.item_spacing = 2.0f;
-	theme.frame_padding = Vec2 { 4.0f, 4.0f };
+	theme.prompt_text_color = color_from_hex(0x9E9E9EFF);
+	theme.item_spacing = 4.0f;
+	theme.frame_padding = Vec2 { 6.0f, 6.0f };
 
 	constexpr size_t INPUT_BUFFER_SIZE = 128;
 	wchar_t text_buffer[INPUT_BUFFER_SIZE];
@@ -209,12 +211,14 @@ int main()
 		ui::begin_frame();
 		ui::begin_vertical_layout();
 
-		if (ui::text_input(input_state, 128.0)) {
+		if (ui::text_input(input_state, L"Search ...")) {
 			std::wstring_view search_pattern(text_buffer, input_state.text_length);
 			update_search_result(search_pattern, entries, matches, highlights);
 
 			selected_result_entry = 0;
 		}
+
+		ui::separator();
 
 		Color highlight_color = Color { 255, 0, 255, 255 };
 

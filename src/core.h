@@ -20,6 +20,15 @@ inline uint32_t color_to_uint32(Color color) {
 		| (static_cast<uint32_t>(color.a));
 }
 
+inline Color color_from_hex(uint32_t hex) {
+	uint8_t r = static_cast<uint8_t>(hex >> 24);
+	uint8_t g = static_cast<uint8_t>(hex >> 16);
+	uint8_t b = static_cast<uint8_t>(hex >> 8);
+	uint8_t a = static_cast<uint8_t>(hex);
+
+	return Color { r, g, b, a };
+}
+
 struct Vec2;
 
 struct UVec2 {
@@ -81,6 +90,10 @@ inline Vec2 max(Vec2 a, Vec2 b) {
 //
 
 struct Rect {
+	inline float width() const { return max.x - min.x; }
+	inline float height() const { return max.y - min.y; }
+	inline Vec2 size() const { return max - min; }
+
 	Vec2 min;
 	Vec2 max;
 };

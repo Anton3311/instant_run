@@ -186,7 +186,7 @@ bool button(std::wstring_view text) {
 	return pressed && hovered;
 }
 
-bool text_input(TextInputState& input_state, float width) {
+bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 	// Process Input
 	
 	bool changed = false;
@@ -237,18 +237,24 @@ bool text_input(TextInputState& input_state, float width) {
 
 	std::wstring_view text(input_state.buffer.values, input_state.text_length);
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
+	Vec2 prompt_size = compute_text_size(*s_ui_state.theme.default_font, prompt);
 
-	Vec2 text_field_size = text_size + s_ui_state.theme.frame_padding * 2.0f;
-	text_field_size.x = width;
+	Vec2 text_field_size = max(text_size, prompt_size) + s_ui_state.theme.frame_padding * 2.0f;
 
 	add_item(text_field_size);
 
 	Rect bounds = s_ui_state.last_item.bounds;
 
 	draw_rect(bounds, s_ui_state.theme.button_color);
-	draw_text(text, bounds.min + s_ui_state.theme.frame_padding, *s_ui_state.theme.default_font, s_ui_state.theme.text_color);
 
-	Vec2 text_cursor_position = bounds.min + s_ui_state.theme.frame_padding;
+	Vec2 text_position = bounds.min + s_ui_state.theme.frame_padding;
+	if (text.length() > 0) {
+		draw_text(text, text_position, *s_ui_state.theme.default_font, s_ui_state.theme.text_color);
+	} else if (prompt.length() > 0) {
+		draw_text(prompt, text_position, *s_ui_state.theme.default_font, s_ui_state.theme.prompt_text_color);
+	}
+
+	Vec2 text_cursor_position = text_position;
 	text_cursor_position.x += text_size.x;
 
 	draw_rect(Rect { text_cursor_position, text_cursor_position + Vec2 { 2.0f, text_size.y } }, WHITE);
@@ -267,6 +273,22 @@ void colored_text(std::wstring_view text, Color color) {
 
 void text(std::wstring_view text) {
 	colored_text(text, s_ui_state.theme.text_color);
+}
+
+static constexpr float SEPARATOR_THICKNESS = 2.0f;
+
+void separator() {
+	switch (s_ui_state.layout.kind) {
+	case LayoutKind::Vertical:
+		add_item(Vec2 { s_ui_state.layout.bounds.width(), SEPARATOR_THICKNESS });
+		break;
+	case LayoutKind::Horizontal:
+		add_item(Vec2 { SEPARATOR_THICKNESS, s_ui_state.layout.bounds.height() });
+		break;
+	}
+
+	Rect bounds = s_ui_state.last_item.bounds;
+	draw_rect(bounds, s_ui_state.theme.separator_color);
 }
 
 //

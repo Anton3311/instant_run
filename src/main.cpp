@@ -19,6 +19,15 @@ struct ResultEntry {
 	RangeU32 highlights;
 };
 
+struct ResultViewState {
+	uint32_t selected_index;
+	uint32_t scroll_offset;
+	uint32_t visible_item_count;
+	
+	std::vector<ResultEntry> matches;
+	std::vector<RangeU32> highlights;
+};
+
 bool starts_with(std::wstring_view string, std::wstring_view start_pattern) {
 	if (string.length() < start_pattern.length()) {
 		return false;
@@ -151,6 +160,34 @@ void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entri
 	}
 }
 
+void process_result_view_key_event(ResultViewState& state, KeyCode key) {
+	size_t result_count = state.matches.size();
+
+	switch (key) {
+	case KeyCode::ArrowUp:
+		state.selected_index = (state.selected_index + result_count - 1) % result_count;
+		break;
+	case KeyCode::ArrowDown:
+		state.selected_index = (state.selected_index + 1) % result_count;
+		break;
+	}
+}
+
+void update_result_view_scroll(ResultViewState& state) {
+	uint32_t visible_range_end = state.scroll_offset + state.visible_item_count;
+	bool is_selection_visible = state.selected_index >= state.scroll_offset && state.selected_index < visible_range_end;
+
+	if (is_selection_visible) {
+		return;
+	}
+
+	if (state.selected_index >= visible_range_end) {
+		state.scroll_offset += state.selected_index - visible_range_end + 1;
+	} else if (state.selected_index < state.scroll_offset) {
+		state.scroll_offset = state.selected_index;
+	}
+}
+
 int main()
 {
 	Window* window = create_window(800, 500, L"Instant Run");
@@ -194,11 +231,9 @@ int main()
 		std::cout << e.what() << '\n';
 	}
 
-	std::vector<ResultEntry> matches;
-	std::vector<RangeU32> highlights;
-	size_t selected_result_entry = 0;
+	ResultViewState result_view_state{};
 
-	update_search_result({}, entries, matches, highlights);
+	update_search_result({}, entries, result_view_state.matches, result_view_state.highlights);
 
 	while (!window_should_close(window)) {
 		poll_window_events(window);
@@ -213,17 +248,11 @@ int main()
 					case KeyCode::Escape:
 						close_window(*window);
 						break;
-					case KeyCode::ArrowUp:
-						selected_result_entry = (selected_result_entry + matches.size() - 1) % matches.size();
-						break;
-					case KeyCode::ArrowDown:
-						selected_result_entry = (selected_result_entry + 1) % matches.size();
-						break;
-					case KeyCode::Enter:
-						std::wcout << entries[matches[selected_result_entry].entry_index].path << '\n';
-						break;
 					case KeyCode::F3:
 						options.debug_layout = !options.debug_layout;
+						break;
+					default:
+						process_result_view_key_event(result_view_state, key_event.code);
 						break;
 					}
 				}
@@ -242,22 +271,33 @@ int main()
 
 		if (ui::text_input(input_state, L"Search ...")) {
 			std::wstring_view search_pattern(text_buffer, input_state.text_length);
-			update_search_result(search_pattern, entries, matches, highlights);
+			update_search_result(search_pattern, entries, result_view_state.matches, result_view_state.highlights);
 
-			selected_result_entry = 0;
+			result_view_state.selected_index = 0;
 		}
 
 		if (ui::button(L"Clear")) {
 			input_state.text_length = 0;
-			update_search_result(L"", entries, matches, highlights);
+			update_search_result(L"", entries, result_view_state.matches, result_view_state.highlights);
 		}
 
 		ui::separator();
 
-		for (size_t i = 0; i < matches.size(); i++) {
-			bool is_selected = i == selected_result_entry;
+		float available_height = ui::get_available_layout_space();
+		float item_height = font.size;
 
-			const ResultEntry& match = matches[i];
+		result_view_state.visible_item_count = std::ceil(available_height / (item_height + theme.item_spacing));
+
+		update_result_view_scroll(result_view_state);
+
+		uint32_t visible_item_count = std::min(
+				result_view_state.visible_item_count,
+				(uint32_t)result_view_state.matches.size() - result_view_state.scroll_offset);
+
+		for (uint32_t i = result_view_state.scroll_offset; i < result_view_state.scroll_offset + visible_item_count; i++) {
+			bool is_selected = i == result_view_state.selected_index;
+
+			const ResultEntry& match = result_view_state.matches[i];
 			const Entry& entry = entries[match.entry_index];
 
 			Color text_color = is_selected ? Color { 0, 255, 0, 255 } : WHITE;
@@ -268,7 +308,7 @@ int main()
 
 				uint32_t cursor = 0;
 				for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
-					RangeU32 highlight_range = highlights[i];
+					RangeU32 highlight_range = result_view_state.highlights[i];
 
 					if (cursor != highlight_range.start) {
 						std::wstring_view t = std::wstring_view(entry.name)

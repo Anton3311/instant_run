@@ -90,6 +90,19 @@ void set_cursor(Vec2 position) {
 	s_ui_state.layout.cursor = position;
 }
 
+float get_available_layout_space() {
+	UVec2 window_size = get_window_framebuffer_size(s_ui_state.window);
+
+	switch (s_ui_state.layout.kind) {
+	case LayoutKind::Vertical:
+		return static_cast<float>(window_size.y) - s_ui_state.layout.cursor.y;
+	case LayoutKind::Horizontal:
+		return static_cast<float>(window_size.x) - s_ui_state.layout.cursor.x;
+	}
+
+	return 0.0f;
+}
+
 void push_next_item_fixed_size(float fixed_size) {
 	s_ui_state.layout.next_item_size_constraint = SizeConstraint::Fixed;
 	s_ui_state.layout.next_item_fixed_size = fixed_size;

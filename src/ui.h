@@ -60,6 +60,8 @@ bool is_item_hoevered();
 Vec2 get_item_size();
 void set_cursor(Vec2 position);
 
+float get_available_layout_space();
+
 void push_next_item_fixed_size(float fixed_size);
 
 //

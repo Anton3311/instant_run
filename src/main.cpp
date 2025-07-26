@@ -64,6 +64,37 @@ uint32_t compute_edit_distance(const std::wstring_view& string, const std::wstri
 	return dp[string.size()][pattern.size()];
 }
 
+inline wchar_t to_lower_case(wchar_t c) {
+	if (c >= L'A' && c <= 'Z') {
+		return c - L'A' + 'a';
+	}
+	return c;
+}
+
+uint32_t compute_logest_common_subsequence(const std::wstring_view& string, const std::wstring_view& pattern) {
+	if (string.length() < pattern.length()) {
+		return 0;
+	}
+
+	uint32_t result = 0;
+
+	for (size_t i = 0; i < (string.length() - pattern.length()); i++) {
+		uint32_t sequence_length = 0;
+
+		for (size_t j = 0; j < pattern.size(); j++) {
+			if (to_lower_case(string[i + j]) == to_lower_case(pattern[j])) {
+				sequence_length += 1;
+			} else {
+				break;
+			}
+		}
+
+		result = std::max(result, sequence_length);
+	}
+
+	return result;
+}
+
 void update_search_result(std::wstring_view search_pattern,
 		const std::vector<Entry>& entries,
 		std::vector<ResultEntry>& result) {
@@ -72,12 +103,12 @@ void update_search_result(std::wstring_view search_pattern,
 	for (size_t i = 0; i < entries.size(); i++) {
 		const Entry& entry = entries[i];
 
-		uint32_t score = compute_edit_distance(entry.name, search_pattern);
+		uint32_t score = compute_logest_common_subsequence(entry.name, search_pattern);
 		result.push_back({ (uint32_t)i, score });
 	}
 
 	std::sort(result.begin(), result.end(), [&](auto a, auto b) -> bool {
-		return a.score < b.score;
+		return a.score > b.score;
 	});
 }
 

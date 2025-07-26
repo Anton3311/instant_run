@@ -163,6 +163,8 @@ int main()
 	theme.item_spacing = 4.0f;
 	theme.frame_padding = Vec2 { 6.0f, 6.0f };
 
+	Color highlight_color = color_from_hex(0xE6A446FF);
+
 	constexpr size_t INPUT_BUFFER_SIZE = 128;
 	wchar_t text_buffer[INPUT_BUFFER_SIZE];
 	ui::TextInputState input_state{};
@@ -211,6 +213,10 @@ int main()
 		ui::begin_frame();
 		ui::begin_vertical_layout();
 
+		float text_field_width = static_cast<float>(get_window_framebuffer_size(window).x);
+
+		ui::push_next_item_fixed_size(text_field_width);
+
 		if (ui::text_input(input_state, L"Search ...")) {
 			std::wstring_view search_pattern(text_buffer, input_state.text_length);
 			update_search_result(search_pattern, entries, matches, highlights);
@@ -219,8 +225,6 @@ int main()
 		}
 
 		ui::separator();
-
-		Color highlight_color = Color { 255, 0, 255, 255 };
 
 		for (size_t i = 0; i < matches.size(); i++) {
 			bool is_selected = i == selected_result_entry;

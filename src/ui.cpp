@@ -21,7 +21,9 @@ struct LayoutState {
 	Rect bounds;
 	Vec2 cursor;
 	float item_spacing;
-	bool has_item;
+
+	SizeConstraint next_item_size_constraint;
+	float next_item_fixed_size;
 };
 
 enum class MouseButtonState {
@@ -72,25 +74,25 @@ void add_item(Vec2 size) {
 		break;
 	}
 
-	if (layout.has_item) {
-		layout.bounds = combine_rects(layout.bounds, s_ui_state.last_item.bounds);
-	} else {
-		layout.has_item = true;
-		layout.bounds = s_ui_state.last_item.bounds;
-	}
+	layout.bounds = combine_rects(layout.bounds, s_ui_state.last_item.bounds);
 }
 
 bool is_item_hoevered() {
 	return rect_contains_point(s_ui_state.last_item.bounds, s_ui_state.mouse_position);
 }
 
+Vec2 get_item_size() {
+	Rect bounds = s_ui_state.last_item.bounds;
+	return bounds.max - bounds.min;
+}
+
 void set_cursor(Vec2 position) {
 	s_ui_state.layout.cursor = position;
 }
 
-Vec2 get_item_size() {
-	Rect bounds = s_ui_state.last_item.bounds;
-	return bounds.max - bounds.min;
+void push_next_item_fixed_size(float fixed_size) {
+	s_ui_state.layout.next_item_size_constraint = SizeConstraint::Fixed;
+	s_ui_state.layout.next_item_fixed_size = fixed_size;
 }
 
 void begin_frame() {
@@ -186,9 +188,7 @@ bool button(std::wstring_view text) {
 	return pressed && hovered;
 }
 
-bool text_input(TextInputState& input_state, std::wstring_view prompt) {
-	// Process Input
-	
+static bool text_input_behaviour(TextInputState& input_state) {
 	bool changed = false;
 	Span<const WindowEvent> events = get_window_events(s_ui_state.window);
 	for (size_t i = 0; i < events.count; i++) {
@@ -233,13 +233,38 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 		}
 	}
 
+	return changed;
+}
+
+bool text_input(TextInputState& input_state, std::wstring_view prompt) {
+	// Process Input
+	
+	bool changed = text_input_behaviour(input_state);
+
 	// Draw
 
 	std::wstring_view text(input_state.buffer.values, input_state.text_length);
-	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
-	Vec2 prompt_size = compute_text_size(*s_ui_state.theme.default_font, prompt);
 
-	Vec2 text_field_size = max(text_size, prompt_size) + s_ui_state.theme.frame_padding * 2.0f;
+	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
+	Vec2 text_field_size{};
+
+	switch (s_ui_state.layout.next_item_size_constraint) {
+	case SizeConstraint::WrapContent:
+	{
+		Vec2 prompt_size = compute_text_size(*s_ui_state.theme.default_font, prompt);
+		text_field_size = max(text_size, prompt_size) + s_ui_state.theme.frame_padding * 2.0f;
+		break;
+	}
+	case SizeConstraint::Fixed:
+		text_field_size = Vec2 {
+			s_ui_state.layout.next_item_fixed_size,
+				s_ui_state.theme.default_font->size + s_ui_state.theme.frame_padding.y * 2.0f
+		};
+
+		// Reset constraint
+		s_ui_state.layout.next_item_size_constraint = SizeConstraint::WrapContent;
+		break;
+	}
 
 	add_item(text_field_size);
 
@@ -318,7 +343,7 @@ void begin_vertical_layout() {
 	Vec2 cursor = s_ui_state.layout.cursor;
 	s_ui_state.layout = LayoutState {
 		.kind = LayoutKind::Vertical,
-		.bounds = Rect{},
+		.bounds = Rect{ cursor, cursor },
 		.cursor = cursor,
 		.item_spacing = s_ui_state.theme.item_spacing
 	};
@@ -334,7 +359,7 @@ void begin_horizontal_layout() {
 	Vec2 cursor = s_ui_state.layout.cursor;
 	s_ui_state.layout = LayoutState {
 		.kind = LayoutKind::Horizontal,
-		.bounds = Rect{},
+		.bounds = Rect{ cursor, cursor },
 		.cursor = cursor,
 		.item_spacing = s_ui_state.theme.item_spacing
 	};

@@ -13,6 +13,11 @@ struct Options {
 	bool debug_layout;
 };
 
+enum class SizeConstraint {
+	WrapContent,
+	Fixed,
+};
+
 struct Theme {
 	const Font* default_font;
 
@@ -50,6 +55,8 @@ void add_item(Vec2 size);
 bool is_item_hoevered();
 Vec2 get_item_size();
 void set_cursor(Vec2 position);
+
+void push_next_item_fixed_size(float fixed_size);
 
 //
 // Widgets

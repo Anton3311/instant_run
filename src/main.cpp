@@ -144,11 +144,6 @@ void update_search_result(std::wstring_view search_pattern,
 	});
 }
 
-float compute_result_view_item_height() {
-	const ui::Theme& theme = ui::get_theme();
-	return theme.default_font->size + theme.frame_padding.y * 2.0f;
-}
-
 enum class EntryAction {
 	None,
 	Launch,
@@ -162,7 +157,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	const ui::Theme& theme = ui::get_theme();
 
 	Vec2 available_region = ui::get_available_layout_region_size();
-	Vec2 widget_size = Vec2 { available_region.x, compute_result_view_item_height() };
+	Vec2 widget_size = Vec2 { available_region.x, ui::get_default_widget_height() };
 
 	ui::add_item(widget_size);
 
@@ -334,8 +329,12 @@ int main()
 	theme.frame_padding = Vec2 { 12.0f, 8.0f };
 	theme.frame_corner_radius = 4.0f;
 
+	theme.icon_size = ICON_SIZE;
+	theme.icon_color = theme.prompt_text_color;
+	theme.icon_hovered_color = WHITE;
+	theme.icon_pressed_color = theme.prompt_text_color;
+
 	Color highlight_color = color_from_hex(0xE6A446FF);
-	Color icon_color = theme.prompt_text_color;
 
 	constexpr size_t INPUT_BUFFER_SIZE = 128;
 	wchar_t text_buffer[INPUT_BUFFER_SIZE];
@@ -397,7 +396,7 @@ int main()
 
 		{
 			ui::begin_horizontal_layout();
-			ui::image(icons_texture, Vec2 { ICON_SIZE, ICON_SIZE }, icons.search, icon_color);
+			ui::image(icons_texture, Vec2 { ICON_SIZE, ICON_SIZE }, icons.search, theme.icon_color);
 
 			if (ui::text_input(input_state, L"Search ...")) {
 				std::wstring_view search_pattern(text_buffer, input_state.text_length);
@@ -406,9 +405,7 @@ int main()
 				result_view_state.selected_index = 0;
 			}
 
-			ui::image(icons_texture, Vec2 { ICON_SIZE, ICON_SIZE }, icons.close, icon_color);
-
-			if (ui::is_item_hovered() && ui::is_mouse_button_pressed(MouseButton::Left)) {
+			if (ui::icon_button(icons_texture, icons.close)) {
 				input_state.text_length = 0;
 			}
 
@@ -418,7 +415,7 @@ int main()
 		ui::separator();
 
 		float available_height = ui::get_available_layout_space();
-		float item_height = compute_result_view_item_height() + theme.default_layout_config.item_spacing;
+		float item_height = ui::get_default_widget_height() + theme.default_layout_config.item_spacing;
 
 		result_view_state.visible_item_count = std::ceil(available_height / item_height);
 

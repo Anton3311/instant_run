@@ -225,6 +225,10 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text) {
 	return Vec2 { text_width, font.size };
 }
 
+float get_default_widget_height() {
+	return s_ui_state.theme.default_font->size + s_ui_state.theme.frame_padding.y * 2.0f;
+}
+
 bool button(std::wstring_view text) {
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
 	Vec2 button_size = text_size + s_ui_state.theme.frame_padding * 2.0f;
@@ -247,6 +251,37 @@ bool button(std::wstring_view text) {
 			item_bounds.min + s_ui_state.theme.frame_padding,
 			*s_ui_state.theme.default_font,
 			s_ui_state.theme.text_color);
+
+	return pressed && hovered;
+}
+
+bool icon_button(const Texture& texture, Rect uv_rect) {
+	float button_size = get_default_widget_height();
+
+	add_item(Vec2 { button_size, button_size });
+
+	Rect bounds = s_ui_state.last_item.bounds;
+	Vec2 icon_size = Vec2 { s_ui_state.theme.icon_size, s_ui_state.theme.icon_size };
+	Vec2 icon_origin = bounds.center() - icon_size * 0.5f;
+
+	Rect icon_rect = Rect { icon_origin, icon_origin + icon_size };
+
+	bool hovered = is_item_hovered();
+	bool pressed = s_ui_state.mouse_button_states[(size_t)MouseButton::Left] == MouseButtonState::Pressed;
+
+	Color button_color = s_ui_state.theme.widget_color;
+	Color icon_color = s_ui_state.theme.icon_color;
+
+	if (pressed && hovered) {
+		button_color = s_ui_state.theme.widget_pressed_color;
+		icon_color = s_ui_state.theme.icon_pressed_color;
+	} else if (hovered) {
+		button_color = s_ui_state.theme.widget_hovered_color;
+		icon_color = s_ui_state.theme.icon_hovered_color;
+	}
+
+	draw_rounded_rect(bounds, button_color, s_ui_state.theme.frame_corner_radius);
+	draw_rect(icon_rect, icon_color, texture, uv_rect);
 
 	return pressed && hovered;
 }

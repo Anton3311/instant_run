@@ -111,6 +111,7 @@ struct Rect {
 	inline float width() const { return max.x - min.x; }
 	inline float height() const { return max.y - min.y; }
 	inline Vec2 size() const { return max - min; }
+	inline Vec2 center() const { return (min + max) * 0.5f; }
 
 	Vec2 min;
 	Vec2 max;

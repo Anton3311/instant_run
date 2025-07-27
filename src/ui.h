@@ -38,6 +38,12 @@ struct Theme {
 	Color widget_hovered_color;
 	Color widget_pressed_color;
 
+	Color icon_color;
+	Color icon_hovered_color;
+	Color icon_pressed_color;
+
+	float icon_size;
+
 	LayoutConfig default_layout_config;
 
 	float frame_corner_radius;
@@ -84,7 +90,10 @@ void push_next_item_fixed_size(float fixed_size);
 // Widgets
 //
 
+float get_default_widget_height();
+
 bool button(std::wstring_view text);
+bool icon_button(const Texture& texture, Rect uv_rect);
 void image(const Texture& texture, Vec2 size, Rect uv_rect, Color tint = WHITE);
 bool text_input(TextInputState& input_state, std::wstring_view prompt = {}); 
 

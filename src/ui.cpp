@@ -255,7 +255,11 @@ bool button(std::wstring_view text) {
 	return pressed && hovered;
 }
 
-bool icon_button(const Texture& texture, Rect uv_rect) {
+bool icon_button(const Texture& texture, Rect uv_rect, const WidgetStyle* style) {
+	if (style == nullptr) {
+		style = &s_ui_state.theme.default_button_style;
+	}
+
 	float button_size = get_default_widget_height();
 
 	add_item(Vec2 { button_size, button_size });
@@ -273,11 +277,11 @@ bool icon_button(const Texture& texture, Rect uv_rect) {
 	Color icon_color = s_ui_state.theme.icon_color;
 
 	if (pressed && hovered) {
-		button_color = s_ui_state.theme.widget_pressed_color;
-		icon_color = s_ui_state.theme.icon_pressed_color;
+		button_color = style->pressed_color;
+		icon_color = style->content_pressed_color;
 	} else if (hovered) {
-		button_color = s_ui_state.theme.widget_hovered_color;
-		icon_color = s_ui_state.theme.icon_hovered_color;
+		button_color = style->hovered_color;
+		icon_color = style->content_hovered_color;
 	}
 
 	draw_rounded_rect(bounds, button_color, s_ui_state.theme.frame_corner_radius);

@@ -321,6 +321,14 @@ int main()
 	theme.widget_hovered_color = color_from_hex(0x4F4F56FF);
 	theme.widget_pressed_color = color_from_hex(0x37373AFF);
 
+	theme.default_button_style.color = color_from_hex(0x242222FF);
+	theme.default_button_style.hovered_color = color_from_hex(0x4F4F56FF);
+	theme.default_button_style.pressed_color = color_from_hex(0x37373AFF);
+
+	theme.default_button_style.content_color = color_from_hex(0x9E9E9EFF);
+	theme.default_button_style.content_hovered_color = WHITE;
+	theme.default_button_style.content_pressed_color = color_from_hex(0x9E9E9EFF);
+
 	theme.separator_color = color_from_hex(0x37373AFF);
 	theme.text_color = WHITE;
 	theme.prompt_text_color = color_from_hex(0x9E9E9EFF);
@@ -405,7 +413,12 @@ int main()
 				result_view_state.selected_index = 0;
 			}
 
-			if (ui::icon_button(icons_texture, icons.close)) {
+			ui::WidgetStyle close_icon_style = theme.default_button_style;
+			close_icon_style.color = TRANSPARENT;
+			close_icon_style.hovered_color = TRANSPARENT;
+			close_icon_style.pressed_color = TRANSPARENT;
+
+			if (ui::icon_button(icons_texture, icons.close, &close_icon_style)) {
 				input_state.text_length = 0;
 			}
 

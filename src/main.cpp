@@ -318,11 +318,13 @@ int main()
 	theme.window_background = color_from_hex(0x242222FF);
 
 	theme.widget_color = color_from_hex(0x242222FF);
-	theme.widget_hovered_color = color_from_hex(0x4F4F56FF);
+	// NOTE: hovered_color & pressed_color are the same
+	theme.widget_hovered_color = color_from_hex(0x37373AFF);
 	theme.widget_pressed_color = color_from_hex(0x37373AFF);
 
+	// NOTE: hovered_color & pressed_color are the same
 	theme.default_button_style.color = color_from_hex(0x242222FF);
-	theme.default_button_style.hovered_color = color_from_hex(0x4F4F56FF);
+	theme.default_button_style.hovered_color = color_from_hex(0x37373AFF);
 	theme.default_button_style.pressed_color = color_from_hex(0x37373AFF);
 
 	theme.default_button_style.content_color = color_from_hex(0x9E9E9EFF);

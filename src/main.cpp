@@ -399,12 +399,16 @@ int main()
 		ui::begin_frame();
 		ui::begin_vertical_layout();
 
-		float text_field_width = ui::get_available_layout_region_size().x;
-		ui::push_next_item_fixed_size(text_field_width);
-
 		{
 			ui::begin_horizontal_layout();
-			ui::image(icons_texture, Vec2 { ICON_SIZE, ICON_SIZE }, icons.search, theme.icon_color);
+
+			float icon_width = ui::get_default_widget_height(); // icons are square
+			float text_field_width = ui::get_available_layout_region_size().x
+				- (icon_width + theme.default_layout_config.item_spacing) * 2.0f;
+
+			ui::icon(icons_texture, icons.search);
+
+			ui::push_next_item_fixed_size(text_field_width);
 
 			if (ui::text_input(input_state, L"Search ...")) {
 				std::wstring_view search_pattern(text_buffer, input_state.text_length);

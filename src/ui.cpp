@@ -290,6 +290,20 @@ bool icon_button(const Texture& texture, Rect uv_rect, const WidgetStyle* style)
 	return pressed && hovered;
 }
 
+void icon(const Texture& texture, Rect uv_rect) {
+	float item_size = get_default_widget_height();
+
+	add_item(Vec2 { item_size, item_size });
+
+	Rect bounds = s_ui_state.last_item.bounds;
+	Vec2 icon_size = Vec2 { s_ui_state.theme.icon_size, s_ui_state.theme.icon_size };
+	Vec2 icon_origin = bounds.center() - icon_size * 0.5f;
+
+	Rect icon_rect = Rect { icon_origin, icon_origin + icon_size };
+
+	draw_rect(icon_rect, s_ui_state.theme.icon_color, texture, uv_rect);
+}
+
 void image(const Texture& texture, Vec2 size, Rect uv_rect, Color tint) {
 	add_item(size);
 

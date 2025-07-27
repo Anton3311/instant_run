@@ -106,6 +106,7 @@ float get_default_widget_height();
 
 bool button(std::wstring_view text);
 bool icon_button(const Texture& texture, Rect uv_rect, const WidgetStyle* style = nullptr);
+void icon(const Texture& texture, Rect uv_rect);
 void image(const Texture& texture, Vec2 size, Rect uv_rect, Color tint = WHITE);
 bool text_input(TextInputState& input_state, std::wstring_view prompt = {}); 
 

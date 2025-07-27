@@ -19,6 +19,7 @@ enum class LayoutKind {
 struct LayoutState {
 	LayoutKind kind;
 	Rect bounds;
+	Rect content_bounds;
 	Vec2 cursor;
 	LayoutConfig config;
 
@@ -117,25 +118,21 @@ bool is_mouse_button_pressed(MouseButton button) {
 }
 
 float get_available_layout_space() {
-	UVec2 window_size = get_window_framebuffer_size(s_ui_state.window);
-
 	const LayoutState& layout = s_ui_state.layout;
 
 	switch (s_ui_state.layout.kind) {
 	case LayoutKind::Vertical:
-		return static_cast<float>(window_size.y) - layout.cursor.y - layout.config.padding.y;
+		return static_cast<float>(layout.content_bounds.max.y) - layout.cursor.y;
 	case LayoutKind::Horizontal:
-		return static_cast<float>(window_size.x) - layout.cursor.x - layout.config.padding.x;
+		return static_cast<float>(layout.content_bounds.max.x) - layout.cursor.x;
 	}
 
 	return 0.0f;
 }
 
 Vec2 get_available_layout_region_size() {
-	UVec2 window_size = get_window_framebuffer_size(s_ui_state.window);
-	return Vec2 { static_cast<float>(window_size.x), static_cast<float>(window_size.y) }
-		- s_ui_state.layout.cursor
-		- s_ui_state.layout.config.padding;
+	return s_ui_state.layout.content_bounds.max
+		- s_ui_state.layout.cursor;
 }
 
 void push_next_item_fixed_size(float fixed_size) {
@@ -179,10 +176,13 @@ void begin_frame() {
 	float window_height = static_cast<float>(window_size.y);
 
 	draw_rect(Rect { Vec2 { 0.0f, 0.0f }, Vec2 { window_width, window_height } }, s_ui_state.theme.window_background);
+
+	s_ui_state.layout.content_bounds = Rect { Vec2{}, Vec2 { window_width, window_height } };
+	begin_vertical_layout();
 }
 
 void end_frame() {
-
+	end_vertical_layout();
 }
 
 const Theme& get_theme() {
@@ -474,17 +474,23 @@ void set_layout_item_spacing(float item_spacing) {
 }
 
 void begin_vertical_layout(const LayoutConfig* config) {
-	s_ui_state.layout_stack.push_back(s_ui_state.layout);
-
 	if (config == nullptr) {
 		config = &s_ui_state.theme.default_layout_config;
 	}
-	
+
 	Vec2 cursor = s_ui_state.layout.cursor;
+
+	Rect content_bounds{};
+	content_bounds.min = cursor + config->padding;
+	content_bounds.max = s_ui_state.layout.content_bounds.max - config->padding;
+	
+	s_ui_state.layout_stack.push_back(s_ui_state.layout);
+	
 	s_ui_state.layout = LayoutState {
 		.kind = LayoutKind::Vertical,
 		.bounds = Rect{ cursor, cursor + config->padding * 2.0f },
-		.cursor = cursor + config->padding,
+		.content_bounds = content_bounds,
+		.cursor = content_bounds.min,
 		.config = *config
 	};
 }
@@ -494,17 +500,23 @@ void end_vertical_layout() {
 }
 
 void begin_horizontal_layout(const LayoutConfig* config) {
-	s_ui_state.layout_stack.push_back(s_ui_state.layout);
-
 	if (config == nullptr) {
 		config = &s_ui_state.theme.default_layout_config;
 	}
 
 	Vec2 cursor = s_ui_state.layout.cursor;
+
+	Rect content_bounds{};
+	content_bounds.min = cursor + config->padding;
+	content_bounds.max = s_ui_state.layout.content_bounds.max - config->padding;
+
+	s_ui_state.layout_stack.push_back(s_ui_state.layout);
+
 	s_ui_state.layout = LayoutState {
 		.kind = LayoutKind::Horizontal,
 		.bounds = Rect{ cursor, cursor + config->padding * 2.0f },
-		.cursor = cursor + config->padding,
+		.content_bounds = content_bounds,
+		.cursor = content_bounds.min,
 		.config = *config
 	};
 }

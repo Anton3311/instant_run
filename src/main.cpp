@@ -397,7 +397,6 @@ int main()
 
 		begin_frame();
 		ui::begin_frame();
-		ui::begin_vertical_layout();
 
 		{
 			ui::begin_horizontal_layout();
@@ -454,8 +453,6 @@ int main()
 				std::wcout << "Launch " << entry.path.wstring() << '\n';
 			}
 		}
-
-		ui::end_vertical_layout();
 
 		ui::end_frame();
 		end_frame();

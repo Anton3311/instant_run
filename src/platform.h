@@ -94,3 +94,11 @@ void destroy_window(Window* window);
 //
 
 std::vector<std::filesystem::path> get_start_menu_folder_path();
+
+struct Bitmap {
+	uint32_t width;
+	uint32_t height;
+	uint32_t* pixels;
+};
+
+Bitmap get_file_icon(const std::filesystem::path& path);

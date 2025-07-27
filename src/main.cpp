@@ -315,6 +315,11 @@ int main()
 	ui::Theme theme{};
 	theme.default_font = &font;
 
+ 	Bitmap chrome_bitmap = get_file_icon("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe");
+	Texture chrome_icon = create_texture(TextureFormat::R8_G8_B8_A8, chrome_bitmap.width, chrome_bitmap.height, chrome_bitmap.pixels);
+
+	delete[] chrome_bitmap.pixels;
+
 	theme.window_background = color_from_hex(0x242222FF);
 
 	theme.widget_color = color_from_hex(0x242222FF);
@@ -456,12 +461,15 @@ int main()
 			}
 		}
 
+		draw_rect(Rect { { 100.0f, 100.0f }, { 200.0f, 200.0f } }, WHITE, chrome_icon, Rect { Vec2{ 0.0f, 1.0f }, Vec2 { 1.0f, 0.0f }});
+
 		ui::end_frame();
 		end_frame();
 
 		swap_window_buffers(window);
 	}
 
+	delete_texture(chrome_icon);
 	delete_texture(icons_texture);
 	delete_font(font);
 

@@ -382,3 +382,64 @@ std::vector<std::filesystem::path> get_start_menu_folder_path() {
 
 	return results;
 }
+
+Bitmap get_file_icon(const std::filesystem::path& path) {
+	if (!std::filesystem::exists(path)) {
+		return {};
+	}
+
+	HICON small_icon{};
+
+	UINT icon_count = ExtractIconExW(path.wstring().c_str(), 0, &small_icon, nullptr, 1);
+	if (icon_count != 1) {
+		return {};
+	}
+
+	ICONINFO icon_info{};
+	if (!GetIconInfo(small_icon, &icon_info)) {
+		return {};
+	}
+
+	HDC screen_dc = GetDC(nullptr);
+		
+	HBITMAP color_bitmap = icon_info.hbmColor;
+
+	SIZE bitmap_size{};
+
+	BITMAP bitmap;
+	GetObject(color_bitmap, sizeof(bitmap), &bitmap);
+
+	bitmap_size.cx = bitmap.bmWidth;
+	bitmap_size.cy = bitmap.bmHeight;
+
+	size_t pixel_count = bitmap_size.cx * bitmap_size.cy;
+	uint32_t* pixels = new uint32_t[pixel_count * 4];
+
+	BITMAPINFO bmi{};
+	bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+	bmi.bmiHeader.biWidth = bitmap.bmWidth;
+	bmi.bmiHeader.biHeight = -bitmap.bmHeight;
+	bmi.bmiHeader.biPlanes = 1;
+	bmi.bmiHeader.biBitCount = 32;
+	bmi.bmiHeader.biCompression = BI_RGB;
+
+	GetDIBits(screen_dc, color_bitmap, 0, bitmap.bmHeight, pixels, &bmi, DIB_RGB_COLORS);
+
+	for (size_t i = 0; i < pixel_count; i++) {
+		uint32_t v = pixels[i];
+
+		uint8_t r = (v >> 16) & 0xff;
+		uint8_t g = (v >> 8) & 0xff;
+		uint8_t b = (v >> 0) & 0xff;
+		uint8_t a = (v >> 24) & 0xff;
+
+		pixels[i] = (a << 24) | (b << 16) | (g << 8) | r;
+	}
+
+	Bitmap b{};
+	b.width = bitmap_size.cx;
+	b.height = bitmap_size.cy;
+	b.pixels = pixels;
+
+	return b;
+}

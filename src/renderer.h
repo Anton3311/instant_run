@@ -35,6 +35,7 @@ void initialize_renderer(Window* window);
 void shutdown_renderer();
 
 Texture create_texture(TextureFormat format, uint32_t width, uint32_t height, const void* data);
+bool load_texture(const std::filesystem::path& path, Texture& out_texture);
 void delete_texture(const Texture& texture);
 
 Font create_font(const uint8_t* data, size_t data_size, float font_size);
@@ -46,6 +47,7 @@ void end_frame();
 
 void draw_line(Vec2 a, Vec2 b, Color color);
 void draw_rect(const Rect& rect, Color color);
+void draw_rect(const Rect& rect, Color color, const Texture& texture, Rect uv_rect);
 void draw_rounded_rect(const Rect& rect, Color color, float corner_radius);
 void draw_rect_lines(const Rect& rect, Color color);
 void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color color);

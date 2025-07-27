@@ -1,6 +1,7 @@
 #include "renderer.h"
 
 #include <glad/glad.h>
+#include <stb_image.h>
 
 #include <stdlib.h>
 #include <vector>
@@ -302,6 +303,36 @@ Texture create_texture(TextureFormat format, uint32_t width, uint32_t height, co
 	return texture;
 }
 
+bool load_texture(const std::filesystem::path& path, Texture& out_texture) {
+	if (!std::filesystem::exists(path)) {
+		return false;
+	}
+
+	stbi_set_flip_vertically_on_load(true);
+
+	int width, height, channels;
+	stbi_uc* pixel_data = stbi_load(path.string().c_str(), &width, &height, &channels, 0);
+
+	if (!pixel_data) {
+		return false;
+	}
+
+	if (channels == 4) {
+		out_texture = create_texture(TextureFormat::R8_G8_B8_A8,
+				static_cast<uint32_t>(width),
+				static_cast<uint32_t>(height),
+				pixel_data);
+
+		free(pixel_data);
+		return true;
+	} else {
+		free(pixel_data);
+		return false;
+	}
+
+	return true;
+}
+
 void delete_texture(const Texture& texture) {
 	glDeleteTextures(1, &texture.internal_id);
 }
@@ -455,6 +486,50 @@ void draw_rect(const Rect& rect, Color color) {
 	s_state.vertices.push_back(QuadVertex {
 		.position = Vec2 { rect.min.x, rect.max.y },
 		.uv = Vec2 { 0.0f, 0.0f },
+		.color = color32
+	});
+	
+	s_state.indices.push_back(vertex_offset + 0);
+	s_state.indices.push_back(vertex_offset + 1);
+	s_state.indices.push_back(vertex_offset + 2);
+	s_state.indices.push_back(vertex_offset + 0);
+	s_state.indices.push_back(vertex_offset + 2);
+	s_state.indices.push_back(vertex_offset + 3);
+
+	DrawCommand& command = s_state.commands.back();
+	command.index_count += 6;
+}
+
+void draw_rect(const Rect& rect, Color color, const Texture& texture, Rect uv_rect) {
+	push_texture(texture);
+
+	uint32_t vertex_offset = static_cast<uint32_t>(s_state.vertices.size());
+	uint32_t color32 = color_to_uint32(color);
+
+	uv_rect.min.y = 1.0f - uv_rect.min.y;
+	uv_rect.max.y = 1.0f - uv_rect.max.y;
+
+	s_state.vertices.push_back(QuadVertex {
+		.position = rect.min,
+		.uv = uv_rect.min,
+		.color = color32
+	});
+
+	s_state.vertices.push_back(QuadVertex {
+		.position = Vec2 { rect.max.x, rect.min.y },
+		.uv = Vec2 { uv_rect.max.x, uv_rect.min.y },
+		.color = color32
+	});
+
+	s_state.vertices.push_back(QuadVertex {
+		.position = rect.max,
+		.uv = uv_rect.max,
+		.color = color32
+	});
+
+	s_state.vertices.push_back(QuadVertex {
+		.position = Vec2 { rect.min.x, rect.max.y },
+		.uv = Vec2 { uv_rect.min.x, uv_rect.max.y },
 		.color = color32
 	});
 	

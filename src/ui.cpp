@@ -251,6 +251,14 @@ bool button(std::wstring_view text) {
 	return pressed && hovered;
 }
 
+void image(const Texture& texture, Vec2 size, Rect uv_rect, Color tint) {
+	add_item(size);
+
+	Rect bounds = s_ui_state.last_item.bounds;
+
+	draw_rect(bounds, tint, texture, uv_rect);
+}
+
 static bool text_input_behaviour(TextInputState& input_state) {
 	bool changed = false;
 	Span<const WindowEvent> events = get_window_events(s_ui_state.window);

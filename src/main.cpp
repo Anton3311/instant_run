@@ -281,11 +281,40 @@ void update_result_view_scroll(ResultViewState& state) {
 	}
 }
 
+struct Icons {
+	Rect search;
+	Rect close;
+	Rect enter;
+	Rect nav;
+};
+
+static constexpr float ICON_SIZE = 32.0f;
+
+Rect create_icon(UVec2 position, const Texture& texture) {
+
+	float x = ((float)position.x * ICON_SIZE) / (float)texture.width;
+	float y = ((float)position.y * ICON_SIZE) / (float)texture.height;
+
+	float icon_width_uv = ICON_SIZE / (float)texture.width;
+	float icon_height_uv = ICON_SIZE / (float)texture.height;
+
+	return Rect { Vec2 { x, y }, Vec2 { x + icon_width_uv, y + icon_height_uv } };
+}
+
 int main()
 {
 	Window* window = create_window(800, 500, L"Instant Run");
 
 	initialize_renderer(window);
+
+	Texture icons_texture{};
+	load_texture("./assets/icons.png", icons_texture);
+
+	Icons icons{};
+	icons.search = create_icon(UVec2 { 0, 0 }, icons_texture);
+	icons.close = create_icon(UVec2 { 1, 0 }, icons_texture);
+	icons.enter = create_icon(UVec2 { 2, 0 }, icons_texture);
+	icons.nav = create_icon(UVec2 { 3, 0 }, icons_texture);
 
 	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f);
 	ui::Theme theme{};
@@ -306,6 +335,7 @@ int main()
 	theme.frame_corner_radius = 4.0f;
 
 	Color highlight_color = color_from_hex(0xE6A446FF);
+	Color icon_color = theme.prompt_text_color;
 
 	constexpr size_t INPUT_BUFFER_SIZE = 128;
 	wchar_t text_buffer[INPUT_BUFFER_SIZE];
@@ -365,16 +395,24 @@ int main()
 		float text_field_width = ui::get_available_layout_region_size().x;
 		ui::push_next_item_fixed_size(text_field_width);
 
-		if (ui::text_input(input_state, L"Search ...")) {
-			std::wstring_view search_pattern(text_buffer, input_state.text_length);
-			update_search_result(search_pattern, entries, result_view_state.matches, result_view_state.highlights);
+		{
+			ui::begin_horizontal_layout();
+			ui::image(icons_texture, Vec2 { ICON_SIZE, ICON_SIZE }, icons.search, icon_color);
 
-			result_view_state.selected_index = 0;
-		}
+			if (ui::text_input(input_state, L"Search ...")) {
+				std::wstring_view search_pattern(text_buffer, input_state.text_length);
+				update_search_result(search_pattern, entries, result_view_state.matches, result_view_state.highlights);
 
-		if (ui::button(L"Clear")) {
-			input_state.text_length = 0;
-			update_search_result(L"", entries, result_view_state.matches, result_view_state.highlights);
+				result_view_state.selected_index = 0;
+			}
+
+			ui::image(icons_texture, Vec2 { ICON_SIZE, ICON_SIZE }, icons.close, icon_color);
+
+			if (ui::is_item_hovered() && ui::is_mouse_button_pressed(MouseButton::Left)) {
+				input_state.text_length = 0;
+			}
+
+			ui::end_horizontal_layout();
 		}
 
 		ui::separator();
@@ -411,6 +449,7 @@ int main()
 		swap_window_buffers(window);
 	}
 
+	delete_texture(icons_texture);
 	delete_font(font);
 
 	shutdown_renderer();

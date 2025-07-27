@@ -1,3 +1,4 @@
 clang -Ivendor\GLAD\include -c vendor\GLAD\glad.c -o bin_int\debug_win_x86_64\glad.o -m64 -DUNICODE -D_UNICODE
 clang -c vendor\stb_truetype\stb_truetype.c -o bin_int\debug_win_x86_64\stb_truetype.o -m64 -g -DUNICODE -D_UNICODE
+clang -c vendor\stb_image\stb_image.c -o bin_int\debug_win_x86_64\stb_image.o -m64 -g -DUNICODE -D_UNICODE
 

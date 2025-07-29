@@ -165,7 +165,7 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 	style &= ~WS_CAPTION;
 	SetWindowLongPtr(window->handle, GWL_STYLE, style);
 
-	MARGINS margins{};
+	MARGINS margins{ 1, 1, 1, 1 };
 	DwmExtendFrameIntoClientArea(window->handle, &margins);
 
 	SetWindowPos(window->handle, NULL, 0, 0, width, height, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCOPYBITS);

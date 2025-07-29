@@ -234,6 +234,13 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 		return 0;
 	case WM_NCCALCSIZE:
 		return WVR_ALIGNTOP | WVR_ALIGNLEFT;
+	case WM_NCACTIVATE:
+		return TRUE;
+	case WM_GETMINMAXINFO:
+	{
+		// NOTE: This prevents the flickering window style changes when the window foucs changes
+		return 0;
+	}
 	case WM_MOUSEMOVE:
 	{
 		int32_t x = GET_X_LPARAM(lParam);

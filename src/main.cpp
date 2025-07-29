@@ -470,6 +470,8 @@ int main()
 
 		poll_window_events(window);
 
+		bool enter_pressed = false;
+
 		Span<const WindowEvent> events = get_window_events(window);
 		for (size_t i = 0; i < events.count; i++) {
 			switch (events[i].kind) {
@@ -479,6 +481,9 @@ int main()
 					switch (key_event.code) {
 					case KeyCode::Escape:
 						close_window(*window);
+						break;
+					case KeyCode::Enter:
+						enter_pressed = true;
 						break;
 					case KeyCode::F3:
 						options.debug_layout = !options.debug_layout;
@@ -552,8 +557,12 @@ int main()
 					highlight_color,
 					app_icon_storage);
 
+			if (is_selected && enter_pressed) {
+				action = EntryAction::Launch;
+			}
+
 			if (action == EntryAction::Launch) {
-				std::wcout << "Launch " << entry.path.wstring() << '\n';
+				run_file(entry.path, false);
 			}
 		}
 

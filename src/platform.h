@@ -107,3 +107,14 @@ struct Bitmap {
 Bitmap get_file_icon(const std::filesystem::path& path);
 std::filesystem::path read_symlink_path(const std::filesystem::path& path);
 std::filesystem::path read_shortcut_path(const std::filesystem::path& path);
+
+enum class RunFileResult {
+	Ok,
+	OutOfMemory,
+	PathNotFound,
+	BadFormat,
+	AccessDenied,
+	OtherError,
+};
+
+RunFileResult run_file(const std::filesystem::path& path, bool run_as_admin);

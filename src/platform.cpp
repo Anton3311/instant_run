@@ -599,3 +599,51 @@ std::filesystem::path read_shortcut_path(const std::filesystem::path& path) {
 
 	return {};
 }
+
+RunFileResult run_file(const std::filesystem::path& path, bool run_as_admin) {
+	PROFILE_FUNCTION();
+
+	if (!std::filesystem::exists(path)) {
+		return RunFileResult::PathNotFound;
+	}
+
+	// NOTE: open - is can be used to lauch an exe
+	//       runas - is for lauching as admin
+	const wchar_t* operation = run_as_admin ? L"runas" : L"open";
+
+	INT_PTR result = (INT_PTR)ShellExecute(nullptr, // window is null
+			operation,
+			path.wstring().c_str(),
+			L"",
+			nullptr,
+			SW_SHOW);
+
+	if (result >= 32) {
+		return RunFileResult::Ok;
+	}
+
+	switch (result) {
+	case 0:
+	case SE_ERR_OOM:
+		return RunFileResult::OutOfMemory;
+	case ERROR_FILE_NOT_FOUND:
+	case ERROR_PATH_NOT_FOUND:
+	// case SE_ERR_PNF: <- duplicate case
+	case SE_ERR_DLLNOTFOUND:
+	// case SE_ERR_FNF: <- duplicate case
+		return RunFileResult::PathNotFound;
+	case ERROR_BAD_FORMAT:
+		return RunFileResult::BadFormat;
+	case SE_ERR_ACCESSDENIED:
+		return RunFileResult::AccessDenied;
+	case SE_ERR_ASSOCINCOMPLETE:
+	case SE_ERR_DDEBUSY:
+	case SE_ERR_DDEFAIL:
+	case SE_ERR_DDETIMEOUT:
+	case SE_ERR_NOASSOC:
+	case SE_ERR_SHARE:
+		return RunFileResult::OtherError;
+	}
+
+	return RunFileResult::OtherError;
+}

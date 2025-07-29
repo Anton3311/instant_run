@@ -10,13 +10,54 @@
 #include <objbase.h>
 #include <glad/glad.h>
 
+struct ShortcutResolverState {
+	IPersistFile* persistent_file_interface; 
+	IShellLink* shell_link_interface;
+	bool is_valid;
+};
+
+static ShortcutResolverState s_shortcut_resolver;
+
 void initialize_platform() {
 	PROFILE_FUNCTION();
 	CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+	s_shortcut_resolver = {};
+
+    // Get a pointer to the IShellLink interface. It is assumed that CoInitialize
+    // has already been called. 
+    HRESULT hres = CoCreateInstance(CLSID_ShellLink,
+			nullptr,
+			CLSCTX_INPROC_SERVER,
+			IID_IShellLink,
+			(LPVOID*)&s_shortcut_resolver.shell_link_interface); 
+
+    if (SUCCEEDED(hres)) 
+    { 
+        // Get a pointer to the IPersistFile interface. 
+        hres = s_shortcut_resolver.shell_link_interface->QueryInterface(IID_IPersistFile,
+				(void**)&s_shortcut_resolver.persistent_file_interface); 
+        
+        if (SUCCEEDED(hres)) 
+		{
+			s_shortcut_resolver.is_valid = true;
+		}
+	}
 }
 
 void shutdown_platform() {
 	PROFILE_FUNCTION();
+	
+	if (s_shortcut_resolver.persistent_file_interface) {
+		s_shortcut_resolver.persistent_file_interface->Release();
+	}
+
+	if (s_shortcut_resolver.shell_link_interface) {
+		s_shortcut_resolver.shell_link_interface->Release();
+	}
+
+	s_shortcut_resolver = {};
+
 	CoUninitialize();
 }
 
@@ -507,71 +548,54 @@ std::filesystem::path read_symlink_path(const std::filesystem::path& path) {
 // Господи помилуй
 std::filesystem::path read_shortcut_path(const std::filesystem::path& path) {
 	PROFILE_FUNCTION();
+	
+	if (!s_shortcut_resolver.is_valid) {
+		return {};
+	}
+
 	// From: https://learn.microsoft.com/en-us/windows/win32/shell/links?redirectedfrom=MSDN
 
-	HRESULT hres; 
-    IShellLink* psl; 
     WCHAR szGotPath[MAX_PATH]; 
-    WCHAR szDescription[MAX_PATH]; 
+    // WCHAR szDescription[MAX_PATH]; 
     WIN32_FIND_DATA wfd; 
 
-    // Get a pointer to the IShellLink interface. It is assumed that CoInitialize
-    // has already been called. 
-    hres = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID*)&psl); 
-    if (SUCCEEDED(hres)) 
-    { 
-        IPersistFile* ppf; 
- 
-        // Get a pointer to the IPersistFile interface. 
-        hres = psl->QueryInterface(IID_IPersistFile, (void**)&ppf); 
-        
-        if (SUCCEEDED(hres)) 
-        { 
-            WCHAR wsz[MAX_PATH]; 
- 
-            // Add code here to check return value from MultiByteWideChar 
-            // for success.
- 
-            // Load the shortcut. 
-            hres = ppf->Load(path.wstring().c_str(), STGM_READ); 
-            
-            if (SUCCEEDED(hres)) 
-            { 
-                // Resolve the link. 
-				// NOTE: Not sure whether it is ok to pass a nullptr as hwnd
-                hres = psl->Resolve(nullptr, SLR_NO_UI); 
+	WCHAR wsz[MAX_PATH]; 
 
-                if (SUCCEEDED(hres)) 
-                { 
-                    // Get the path to the link target. 
-                    hres = psl->GetPath(szGotPath, MAX_PATH, (WIN32_FIND_DATA*)&wfd, SLGP_SHORTPATH); 
+	// Load the shortcut. 
+	HRESULT hres = s_shortcut_resolver.persistent_file_interface->Load(path.wstring().c_str(), STGM_READ); 
+	
+	if (SUCCEEDED(hres)) 
+	{ 
+		// Resolve the link. 
+		// NOTE: Not sure whether it is ok to pass a nullptr as hwnd
+		hres = s_shortcut_resolver.shell_link_interface->Resolve(nullptr, SLR_NO_UI); 
 
-                    if (SUCCEEDED(hres)) 
-                    { 
-                        // Get the description of the target. 
-                        hres = psl->GetDescription(szDescription, MAX_PATH); 
+		if (SUCCEEDED(hres)) 
+		{ 
+			// Get the path to the link target. 
+			hres = s_shortcut_resolver.shell_link_interface->GetPath(szGotPath,
+					MAX_PATH,
+					(WIN32_FIND_DATA*)&wfd,
+					SLGP_SHORTPATH); 
 
-						if (SUCCEEDED(hres))
-						{
-							// Handle success
-							return std::filesystem::path(szGotPath);
-						}
-						else
-						{
-							// TODO: Handle the error
-							return {};
-						}
-                    }
-                } 
-            } 
+			if (SUCCEEDED(hres)) 
+			{ 
+				// Get the description of the target. 
+				// hres = s_shortcut_resolver.shell_link_interface->GetDescription(szDescription, MAX_PATH); 
 
-            // Release the pointer to the IPersistFile interface. 
-            ppf->Release(); 
-        } 
-
-        // Release the pointer to the IShellLink interface. 
-        psl->Release(); 
-    }
+				if (SUCCEEDED(hres))
+				{
+					// Handle success
+					return std::filesystem::path(szGotPath);
+				}
+				else
+				{
+					// TODO: Handle the error
+					return {};
+				}
+			}
+		} 
+	} 
 
 	return {};
 }

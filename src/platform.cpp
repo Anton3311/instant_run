@@ -105,6 +105,8 @@ struct Window {
 	size_t event_count;
 };
 
+static HMODULE s_opengl_module;
+
 LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam);
 bool create_opengl_context(Window* window);
 bool init_opengl(Window* window);
@@ -366,25 +368,29 @@ bool create_opengl_context(Window* window) {
 	return true;
 }
 
-static void* LoadGLProc(const char* name)
-{
+static void* load_gl_proc(const char* name) {
 	PROFILE_FUNCTION();
-	void* proc = wglGetProcAddress(name);
+	void* proc = (void*)wglGetProcAddress(name);
 
-	if (!proc)
-	{
-		HMODULE openGlModule = GetModuleHandleA("opengl32.dll");
-		if (!openGlModule)
-			return 0;
-
-		return GetProcAddress(openGlModule, name);
+	if (!proc) {
+		return (void*)GetProcAddress(s_opengl_module, name);
 	}
+
 	return proc;
 }
 
 bool init_opengl(Window* window) {
 	PROFILE_FUNCTION();
-	if (!gladLoadGLLoader((GLADloadproc)LoadGLProc))
+
+	if (!s_opengl_module) {
+		s_opengl_module = GetModuleHandleA("opengl32.dll");
+	}
+
+	if (!s_opengl_module) {
+		return false;
+	}
+
+	if (!gladLoadGLLoader((GLADloadproc)load_gl_proc))
 	{
 		return false;
 	}

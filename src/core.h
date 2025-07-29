@@ -2,6 +2,24 @@
 
 #include <stdint.h>
 
+#define PROFILING_ENABLED 1
+
+#if PROFILING_ENABLED
+#include <tracy/Tracy.hpp>
+
+#define PROFILE_SCOPE(name) ZoneScopedN(name)
+#define PROFILE_FUNCTION() PROFILE_SCOPE(__FUNCSIG__)
+
+#define PROFILE_BEGIN_FRAME(name) FrameMarkStart(name)
+#define PROFILE_END_FRAME(name) FrameMarkEnd(name)
+#else
+#define PROFILE_SCOPE(name)
+#define PROFILE_FUNCTION()
+
+#define PROFILE_BEGIN_FRAME(name)
+#define PROFILE_END_FRAME(name)
+#endif
+
 struct Color {
 	uint8_t r;
 	uint8_t g;

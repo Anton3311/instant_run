@@ -11,10 +11,12 @@
 #include <glad/glad.h>
 
 void initialize_platform() {
+	PROFILE_FUNCTION();
 	CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 }
 
 void shutdown_platform() {
+	PROFILE_FUNCTION();
 	CoUninitialize();
 }
 
@@ -68,6 +70,7 @@ bool init_opengl(Window* window);
 bool translate_key_code(WPARAM virtual_key_code, KeyCode& output);
 
 Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) {
+	PROFILE_FUNCTION();
 	Window* window = new Window();
 	window->title = title;
 	window->width = width;
@@ -136,6 +139,7 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 }
 
 void swap_window_buffers(Window* window) {
+	PROFILE_FUNCTION();
 	SwapBuffers(GetDC(window->handle));
 }
 
@@ -144,6 +148,7 @@ bool window_should_close(const Window* window) {
 }
 
 void poll_window_events(Window* window) {
+	PROFILE_FUNCTION();
 	window->event_count = 0;
 
 	MSG message{};
@@ -177,6 +182,7 @@ void destroy_window(Window* window) {
 }
 
 LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam) {
+	PROFILE_FUNCTION();
 	Window* window = reinterpret_cast<Window*>(GetWindowLongPtrW(window_handle, GWLP_USERDATA));
 
 	switch (message)
@@ -262,6 +268,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 }
 
 bool create_opengl_context(Window* window) {
+	PROFILE_FUNCTION();
 	HDC hdc = GetDC(window->handle);
 
 	PIXELFORMATDESCRIPTOR format_descriptor = { sizeof(format_descriptor), 1 };
@@ -313,6 +320,7 @@ bool create_opengl_context(Window* window) {
 
 static void* LoadGLProc(const char* name)
 {
+	PROFILE_FUNCTION();
 	void* proc = wglGetProcAddress(name);
 
 	if (!proc)
@@ -327,6 +335,7 @@ static void* LoadGLProc(const char* name)
 }
 
 bool init_opengl(Window* window) {
+	PROFILE_FUNCTION();
 	if (!gladLoadGLLoader((GLADloadproc)LoadGLProc))
 	{
 		return false;
@@ -336,6 +345,8 @@ bool init_opengl(Window* window) {
 }
 
 bool translate_key_code(WPARAM virtual_key_code, KeyCode& output) {
+	PROFILE_FUNCTION();
+
 	switch (virtual_key_code) {
 	case VK_ESCAPE:
 		output = KeyCode::Escape;
@@ -371,6 +382,7 @@ bool translate_key_code(WPARAM virtual_key_code, KeyCode& output) {
 //
 
 static std::filesystem::path get_known_system_path(KNOWNFOLDERID id) {
+	PROFILE_FUNCTION();
 	PWSTR path = nullptr;
 
 	std::filesystem::path result;
@@ -384,6 +396,7 @@ static std::filesystem::path get_known_system_path(KNOWNFOLDERID id) {
 }
 
 std::vector<std::filesystem::path> get_start_menu_folder_path() {
+	PROFILE_FUNCTION();
 	std::vector<std::filesystem::path> results;
 
  	results.push_back(get_known_system_path(FOLDERID_CommonStartMenu));
@@ -393,6 +406,7 @@ std::vector<std::filesystem::path> get_start_menu_folder_path() {
 }
 
 Bitmap get_file_icon(const std::filesystem::path& path) {
+	PROFILE_FUNCTION();
 	if (!std::filesystem::exists(path)) {
 		return {};
 	}
@@ -454,6 +468,7 @@ Bitmap get_file_icon(const std::filesystem::path& path) {
 }
 
 std::filesystem::path read_symlink_path(const std::filesystem::path& path) {
+	PROFILE_FUNCTION();
 	if (!std::filesystem::exists(path)) {
 		return {};
 	}
@@ -490,9 +505,11 @@ std::filesystem::path read_symlink_path(const std::filesystem::path& path) {
 }
 
 // Господи помилуй
-std::filesystem::path read_shortcut_path(const std::filesystem::path& path) {HRESULT hres; 
+std::filesystem::path read_shortcut_path(const std::filesystem::path& path) {
+	PROFILE_FUNCTION();
 	// From: https://learn.microsoft.com/en-us/windows/win32/shell/links?redirectedfrom=MSDN
 
+	HRESULT hres; 
     IShellLink* psl; 
     WCHAR szGotPath[MAX_PATH]; 
     WCHAR szDescription[MAX_PATH]; 

@@ -17,6 +17,7 @@ struct ApplicationIconsStorage {
 };
 
 void initialize_app_icon_storage(ApplicationIconsStorage& storage, uint32_t icon_size, uint32_t grid_size) {
+	PROFILE_FUNCTION();
 	uint32_t texture_size = icon_size * grid_size;
 
 	storage.texture = create_texture(TextureFormat::R8_G8_B8_A8, texture_size, texture_size, nullptr);
@@ -26,6 +27,7 @@ void initialize_app_icon_storage(ApplicationIconsStorage& storage, uint32_t icon
 }
 
 UVec2 store_app_icon(ApplicationIconsStorage& storage, const void* pixels) {
+	PROFILE_FUNCTION();
 	uint32_t capacity = storage.grid_size * storage.grid_size;
 	if (storage.write_offset == capacity) {
 		return INVALID_ICON_POSITION;
@@ -80,6 +82,7 @@ struct ResultViewState {
 };
 
 bool starts_with(std::wstring_view string, std::wstring_view start_pattern) {
+	PROFILE_FUNCTION();
 	if (string.length() < start_pattern.length()) {
 		return false;
 	}
@@ -95,8 +98,8 @@ bool starts_with(std::wstring_view string, std::wstring_view start_pattern) {
 }
 
 uint32_t dp[100][100];
-uint32_t compute_edit_distance(const std::wstring_view& string, const std::wstring_view& pattern)
-{
+uint32_t compute_edit_distance(const std::wstring_view& string, const std::wstring_view& pattern) {
+	PROFILE_FUNCTION();
 	std::memset(dp, 0, sizeof(dp));
 
 	for (size_t i = 0; i <= string.size(); i++)
@@ -138,6 +141,7 @@ uint32_t compute_logest_common_subsequence(
 		const std::wstring_view& pattern,
 		std::vector<RangeU32>& sequence_ranges,
 		RangeU32& highlight_range) {
+	PROFILE_FUNCTION();
 	if (string.length() < pattern.length()) {
 		return 0;
 	}
@@ -173,6 +177,8 @@ void update_search_result(std::wstring_view search_pattern,
 		const std::vector<Entry>& entries,
 		std::vector<ResultEntry>& result,
 		std::vector<RangeU32>& sequence_ranges) {
+	PROFILE_FUNCTION();
+
 	result.clear();
 	sequence_ranges.clear();
 
@@ -206,6 +212,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		bool is_selected,
 		Color highlight_color,
 		const ApplicationIconsStorage& app_icon_storage) {
+	PROFILE_FUNCTION();
 	const ui::Theme& theme = ui::get_theme();
 
 	Vec2 available_region = ui::get_available_layout_region_size();
@@ -289,12 +296,14 @@ EntryAction draw_result_entry(const ResultEntry& match,
 }
 
 void append_entry(std::vector<Entry>& entries, const std::filesystem::path& path) {
+	PROFILE_FUNCTION();
 	Entry& entry = entries.emplace_back();
 	entry.name = path.filename().replace_extension("").wstring();
 	entry.path = path;
 }
 
 void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entries) {
+	PROFILE_FUNCTION();
 	for (std::filesystem::path child : std::filesystem::directory_iterator(path)) {
 		if (std::filesystem::is_directory(child)) {
 			walk_directory(child, entries);
@@ -353,6 +362,8 @@ Rect create_icon(UVec2 position, const Texture& texture) {
 }
 
 void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage& app_icon_storage) {
+	PROFILE_FUNCTION();
+
 	for (auto& entry : entries) {
 		if (entry.path.extension() != ".lnk") {
 			continue;
@@ -455,6 +466,8 @@ int main()
 	update_search_result({}, entries, result_view_state.matches, result_view_state.highlights);
 
 	while (!window_should_close(window)) {
+		PROFILE_BEGIN_FRAME("Main");
+
 		poll_window_events(window);
 
 		Span<const WindowEvent> events = get_window_events(window);
@@ -548,6 +561,8 @@ int main()
 		end_frame();
 
 		swap_window_buffers(window);
+
+		PROFILE_END_FRAME("Main");
 	}
 
 	delete_texture(app_icon_storage.texture);

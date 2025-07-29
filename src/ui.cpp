@@ -141,6 +141,7 @@ void push_next_item_fixed_size(float fixed_size) {
 }
 
 void begin_frame() {
+	PROFILE_FUNCTION();
 	s_ui_state.layout.cursor = Vec2{};
 	s_ui_state.last_item = {};
 
@@ -182,6 +183,7 @@ void begin_frame() {
 }
 
 void end_frame() {
+	PROFILE_FUNCTION();
 	end_vertical_layout();
 }
 
@@ -198,6 +200,8 @@ Options& get_options() {
 }
 
 Vec2 compute_text_size(const Font& font, std::wstring_view text) {
+	PROFILE_FUNCTION();
+
 	Vec2 char_position{};
 	float text_width = 0.0f;
 
@@ -230,6 +234,8 @@ float get_default_widget_height() {
 }
 
 bool button(std::wstring_view text) {
+	PROFILE_FUNCTION();
+
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
 	Vec2 button_size = text_size + s_ui_state.theme.frame_padding * 2.0f;
 
@@ -313,6 +319,8 @@ void image(const Texture& texture, Vec2 size, Rect uv_rect, Color tint) {
 }
 
 static bool text_input_behaviour(TextInputState& input_state) {
+	PROFILE_FUNCTION();
+
 	bool changed = false;
 	Span<const WindowEvent> events = get_window_events(s_ui_state.window);
 	for (size_t i = 0; i < events.count; i++) {
@@ -361,6 +369,8 @@ static bool text_input_behaviour(TextInputState& input_state) {
 }
 
 bool text_input(TextInputState& input_state, std::wstring_view prompt) {
+	PROFILE_FUNCTION();
+
 	// Process Input
 	
 	bool changed = text_input_behaviour(input_state);
@@ -412,6 +422,7 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 }
 
 void colored_text(std::wstring_view text, Color color) {
+	PROFILE_FUNCTION();
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
 
 	add_item(text_size);

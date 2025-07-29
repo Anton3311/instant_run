@@ -242,6 +242,8 @@ inline static void push_texture(const Texture& texture) {
 }
 
 void initialize_renderer(Window* window) {
+	PROFILE_FUNCTION();
+
 	s_state.window = window;
 
 	create_shaders();
@@ -269,12 +271,14 @@ void initialize_renderer(Window* window) {
 }
 
 void shutdown_renderer() {
+	PROFILE_FUNCTION();
 	delete_texture(s_state.white_texture);
 
 	s_state = {};
 }
 
 Texture create_texture(TextureFormat format, uint32_t width, uint32_t height, const void* data) {
+	PROFILE_FUNCTION();
 	Texture texture{};
 	texture.width = width;
 	texture.height = height;
@@ -307,6 +311,7 @@ Texture create_texture(TextureFormat format, uint32_t width, uint32_t height, co
 }
 
 void upload_texture_region(const Texture& texture, UVec2 offset, UVec2 size, const void* data) {
+	PROFILE_FUNCTION();
 	GLenum texture_format{};
 
 	switch (texture.format) {
@@ -331,6 +336,7 @@ void upload_texture_region(const Texture& texture, UVec2 offset, UVec2 size, con
 }
 
 bool load_texture(const std::filesystem::path& path, Texture& out_texture) {
+	PROFILE_FUNCTION();
 	if (!std::filesystem::exists(path)) {
 		return false;
 	}
@@ -361,10 +367,12 @@ bool load_texture(const std::filesystem::path& path, Texture& out_texture) {
 }
 
 void delete_texture(const Texture& texture) {
+	PROFILE_FUNCTION();
 	glDeleteTextures(1, &texture.internal_id);
 }
 
 Font create_font(const uint8_t* data, size_t data_size, float font_size) {
+	PROFILE_FUNCTION();
 	Font font{};
 	font.char_range_start = 32;
 	font.glyph_count = 96;
@@ -403,6 +411,7 @@ Font create_font(const uint8_t* data, size_t data_size, float font_size) {
 }
 
 Font load_font_from_file(const std::filesystem::path& path, float font_size) {
+	PROFILE_FUNCTION();
 	std::ifstream stream(path, std::ios::binary);
 
 	if (!stream.is_open()) {
@@ -423,6 +432,7 @@ Font load_font_from_file(const std::filesystem::path& path, float font_size) {
 }
 
 void delete_font(const Font& font) {
+	PROFILE_FUNCTION();
 	delete_texture(font.atlas);
 
 	delete[] font.glyphs;
@@ -432,6 +442,7 @@ void begin_frame() {
 }
 
 void end_frame() {
+	PROFILE_FUNCTION();
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glDisable(GL_DEPTH_TEST);
@@ -648,6 +659,8 @@ void draw_rect_lines(const Rect& rect, Color color) {
 }
 
 void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color color) {
+	PROFILE_FUNCTION();
+
 	if (color.a == 0) {
 		return;
 	}

@@ -74,6 +74,9 @@ struct WindowEvent {
 
 struct Window;
 
+void initialize_platform();
+void shutdown_platform();
+
 Window* create_window(uint32_t width, uint32_t height, std::wstring_view title);
 
 void swap_window_buffers(Window* window);
@@ -102,3 +105,5 @@ struct Bitmap {
 };
 
 Bitmap get_file_icon(const std::filesystem::path& path);
+std::filesystem::path read_symlink_path(const std::filesystem::path& path);
+std::filesystem::path read_shortcut_path(const std::filesystem::path& path);

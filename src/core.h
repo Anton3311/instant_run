@@ -34,6 +34,14 @@ struct Vec2;
 struct UVec2 {
 	inline operator Vec2();
 
+	inline bool operator==(UVec2 other) const {
+		return x == other.x && y == other.y;
+	}
+
+	inline bool operator!=(UVec2 other) const {
+		return x != other.x || y != other.y;
+	}
+
 	uint32_t x;
 	uint32_t y;
 };

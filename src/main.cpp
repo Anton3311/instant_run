@@ -7,9 +7,60 @@
 #include "renderer.h"
 #include "ui.h"
 
+static constexpr UVec2 INVALID_ICON_POSITION = UVec2 { UINT32_MAX, UINT32_MAX };
+
+struct ApplicationIconsStorage {
+	Texture texture;
+	uint32_t icon_size;
+	uint32_t write_offset;
+	uint32_t grid_size;
+};
+
+void initialize_app_icon_storage(ApplicationIconsStorage& storage, uint32_t icon_size, uint32_t grid_size) {
+	uint32_t texture_size = icon_size * grid_size;
+
+	storage.texture = create_texture(TextureFormat::R8_G8_B8_A8, texture_size, texture_size, nullptr);
+	storage.icon_size = icon_size;
+	storage.write_offset = 0;
+	storage.grid_size = grid_size;
+}
+
+UVec2 store_app_icon(ApplicationIconsStorage& storage, const void* pixels) {
+	uint32_t capacity = storage.grid_size * storage.grid_size;
+	if (storage.write_offset == capacity) {
+		return INVALID_ICON_POSITION;
+	}
+
+	UVec2 icon_position = UVec2 {
+		storage.write_offset % storage.grid_size,
+		storage.write_offset / storage.grid_size
+	};
+
+	UVec2 offset = UVec2 { icon_position.x * storage.icon_size, icon_position.y * storage.icon_size };
+
+	upload_texture_region(storage.texture, offset, UVec2 { storage.icon_size, storage.icon_size }, pixels);
+	storage.write_offset++;
+	
+	return icon_position;
+}
+
+Rect get_icon_rect(const ApplicationIconsStorage& storage, UVec2 icon_position) {
+	float icon_size = (float)storage.icon_size;
+	float icon_size_uv = 1.0f / (float)storage.grid_size;
+
+	Vec2 offset = Vec2 { (float)icon_position.x, (float)icon_position.y } * icon_size_uv;
+
+	Rect uv_rect = Rect { offset, offset + Vec2 { icon_size_uv, icon_size_uv } };
+	uv_rect.min.y = 1.0f - uv_rect.min.y;
+	uv_rect.max.y = 1.0f - uv_rect.max.y;
+
+	return uv_rect;
+}
+
 struct Entry {
 	std::wstring name;
 	std::filesystem::path path;
+	UVec2 icon;
 };
 
 struct ResultEntry {
@@ -153,7 +204,8 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		const Entry& entry,
 		const ResultViewState& state,
 		bool is_selected,
-		Color highlight_color) {
+		Color highlight_color,
+		const ApplicationIconsStorage& app_icon_storage) {
 	const ui::Theme& theme = ui::get_theme();
 
 	Vec2 available_region = ui::get_available_layout_region_size();
@@ -190,7 +242,11 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		
 		ui::add_item(Vec2 { icon_size, icon_size });
 
-		draw_rounded_rect(ui::get_item_bounds(), WHITE, theme.frame_corner_radius);
+		if (entry.icon != INVALID_ICON_POSITION) {
+			draw_rect(ui::get_item_bounds(), WHITE, app_icon_storage.texture, get_icon_rect(app_icon_storage, entry.icon));
+		} else {
+			draw_rounded_rect(ui::get_item_bounds(), WHITE, theme.frame_corner_radius);
+		}
 
 		ui::append_item_spacing(theme.default_layout_config.item_spacing * 2.0f);
 	}
@@ -296,8 +352,30 @@ Rect create_icon(UVec2 position, const Texture& texture) {
 	return Rect { Vec2 { x, y }, Vec2 { x + icon_width_uv, y + icon_height_uv } };
 }
 
+void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage& app_icon_storage) {
+	for (auto& entry : entries) {
+		if (entry.path.extension() != ".lnk") {
+			continue;
+		}
+
+		std::filesystem::path resolved_path = read_shortcut_path(entry.path);
+
+		if (!std::filesystem::exists(resolved_path)) {
+			continue;
+		}
+
+		Bitmap bitmap = get_file_icon(resolved_path);
+		if (bitmap.pixels) {
+			entry.icon = store_app_icon(app_icon_storage, bitmap.pixels);
+			delete[] bitmap.pixels;
+		}
+	}
+}
+
 int main()
 {
+	initialize_platform();
+
 	Window* window = create_window(800, 500, L"Instant Run");
 
 	initialize_renderer(window);
@@ -315,10 +393,8 @@ int main()
 	ui::Theme theme{};
 	theme.default_font = &font;
 
- 	Bitmap chrome_bitmap = get_file_icon("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe");
-	Texture chrome_icon = create_texture(TextureFormat::R8_G8_B8_A8, chrome_bitmap.width, chrome_bitmap.height, chrome_bitmap.pixels);
-
-	delete[] chrome_bitmap.pixels;
+	ApplicationIconsStorage app_icon_storage{};
+	initialize_app_icon_storage(app_icon_storage, 32, 32);
 
 	theme.window_background = color_from_hex(0x242222FF);
 
@@ -371,6 +447,8 @@ int main()
 	} catch (std::exception e) {
 		std::cout << e.what() << '\n';
 	}
+
+	load_application_icons(entries, app_icon_storage);
 
 	ResultViewState result_view_state{};
 
@@ -454,14 +532,17 @@ int main()
 			const ResultEntry& match = result_view_state.matches[i];
 			const Entry& entry = entries[match.entry_index];
 
-			EntryAction action = draw_result_entry(match, entry, result_view_state, is_selected, highlight_color);
+			EntryAction action = draw_result_entry(match,
+					entry,
+					result_view_state,
+					is_selected,
+					highlight_color,
+					app_icon_storage);
 
 			if (action == EntryAction::Launch) {
 				std::wcout << "Launch " << entry.path.wstring() << '\n';
 			}
 		}
-
-		draw_rect(Rect { { 100.0f, 100.0f }, { 200.0f, 200.0f } }, WHITE, chrome_icon, Rect { Vec2{ 0.0f, 1.0f }, Vec2 { 1.0f, 0.0f }});
 
 		ui::end_frame();
 		end_frame();
@@ -469,13 +550,15 @@ int main()
 		swap_window_buffers(window);
 	}
 
-	delete_texture(chrome_icon);
+	delete_texture(app_icon_storage.texture);
 	delete_texture(icons_texture);
 	delete_font(font);
 
 	shutdown_renderer();
 
 	destroy_window(window);
+
+	shutdown_platform();
 
 	return 0;
 }

@@ -7,17 +7,26 @@
 #include <Shlobj.h>
 #include <windowsx.h>
 #include <dwmapi.h>
+#include <objbase.h>
 #include <glad/glad.h>
+
+void initialize_platform() {
+	CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+}
+
+void shutdown_platform() {
+	CoUninitialize();
+}
+
+//
+// OpenGL
+//
 
 static const wchar_t* WINDOW_CLASS_NAME = L"InstantRun";
 
 constexpr int32_t WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091;
 constexpr int32_t WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092;
 constexpr int32_t WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126;
-
-//
-// OpenGL
-//
 
 using wglCreateContextAttribsARBFunction = HGLRC WINAPI (HDC hdc, HGLRC hShareContext, const int *attribList);
 wglCreateContextAttribsARBFunction* wglCreateContextAttribsARB;
@@ -442,4 +451,110 @@ Bitmap get_file_icon(const std::filesystem::path& path) {
 	b.pixels = pixels;
 
 	return b;
+}
+
+std::filesystem::path read_symlink_path(const std::filesystem::path& path) {
+	if (!std::filesystem::exists(path)) {
+		return {};
+	}
+
+	HANDLE file_handle = CreateFileW(path.wstring().c_str(),
+			0,
+			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+			nullptr,
+			OPEN_EXISTING,
+			FILE_ATTRIBUTE_NORMAL,
+			nullptr);
+
+	if (file_handle == INVALID_HANDLE_VALUE) {
+		CloseHandle(file_handle);
+		return {};
+	}
+
+	wchar_t buffer[MAX_PATH];
+
+	// NOTE: Can return the required buffer size, if a null buffer is passed
+	size_t path_length = GetFinalPathNameByHandleW(file_handle, buffer, sizeof(buffer) / sizeof(TCHAR), FILE_NAME_NORMALIZED);
+
+	if (path_length) {
+		auto result = std::filesystem::path(std::wstring(buffer, path_length));
+
+		CloseHandle(file_handle);
+
+		return result;
+	}
+
+	CloseHandle(file_handle);
+
+	return {};
+}
+
+// Господи помилуй
+std::filesystem::path read_shortcut_path(const std::filesystem::path& path) {HRESULT hres; 
+	// From: https://learn.microsoft.com/en-us/windows/win32/shell/links?redirectedfrom=MSDN
+
+    IShellLink* psl; 
+    WCHAR szGotPath[MAX_PATH]; 
+    WCHAR szDescription[MAX_PATH]; 
+    WIN32_FIND_DATA wfd; 
+
+    // Get a pointer to the IShellLink interface. It is assumed that CoInitialize
+    // has already been called. 
+    hres = CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (LPVOID*)&psl); 
+    if (SUCCEEDED(hres)) 
+    { 
+        IPersistFile* ppf; 
+ 
+        // Get a pointer to the IPersistFile interface. 
+        hres = psl->QueryInterface(IID_IPersistFile, (void**)&ppf); 
+        
+        if (SUCCEEDED(hres)) 
+        { 
+            WCHAR wsz[MAX_PATH]; 
+ 
+            // Add code here to check return value from MultiByteWideChar 
+            // for success.
+ 
+            // Load the shortcut. 
+            hres = ppf->Load(path.wstring().c_str(), STGM_READ); 
+            
+            if (SUCCEEDED(hres)) 
+            { 
+                // Resolve the link. 
+				// NOTE: Not sure whether it is ok to pass a nullptr as hwnd
+                hres = psl->Resolve(nullptr, SLR_NO_UI); 
+
+                if (SUCCEEDED(hres)) 
+                { 
+                    // Get the path to the link target. 
+                    hres = psl->GetPath(szGotPath, MAX_PATH, (WIN32_FIND_DATA*)&wfd, SLGP_SHORTPATH); 
+
+                    if (SUCCEEDED(hres)) 
+                    { 
+                        // Get the description of the target. 
+                        hres = psl->GetDescription(szDescription, MAX_PATH); 
+
+						if (SUCCEEDED(hres))
+						{
+							// Handle success
+							return std::filesystem::path(szGotPath);
+						}
+						else
+						{
+							// TODO: Handle the error
+							return {};
+						}
+                    }
+                } 
+            } 
+
+            // Release the pointer to the IPersistFile interface. 
+            ppf->Release(); 
+        } 
+
+        // Release the pointer to the IShellLink interface. 
+        psl->Release(); 
+    }
+
+	return {};
 }

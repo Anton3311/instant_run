@@ -35,6 +35,7 @@ void initialize_renderer(Window* window);
 void shutdown_renderer();
 
 Texture create_texture(TextureFormat format, uint32_t width, uint32_t height, const void* data);
+void upload_texture_region(const Texture& texture, UVec2 offset, UVec2 size, const void* data);
 bool load_texture(const std::filesystem::path& path, Texture& out_texture);
 void delete_texture(const Texture& texture);
 

@@ -295,12 +295,39 @@ Texture create_texture(TextureFormat format, uint32_t width, uint32_t height, co
 	glBindTexture(GL_TEXTURE_2D, texture.internal_id);
 
 	glTextureStorage2D(texture.internal_id, 1, internal_format, width, height);
-	glTextureSubImage2D(texture.internal_id, 0, 0, 0, width, height, texture_format, GL_UNSIGNED_BYTE, data);
+
+	if (data) {
+		glTextureSubImage2D(texture.internal_id, 0, 0, 0, width, height, texture_format, GL_UNSIGNED_BYTE, data);
+	}
 
 	glTextureParameteri(texture.internal_id, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 	glTextureParameteri(texture.internal_id, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
 	return texture;
+}
+
+void upload_texture_region(const Texture& texture, UVec2 offset, UVec2 size, const void* data) {
+	GLenum texture_format{};
+
+	switch (texture.format) {
+	case TextureFormat::R8_G8_B8_A8:
+		texture_format = GL_RGBA;
+		break;
+	}
+
+	glBindTexture(GL_TEXTURE_2D, texture.internal_id);
+
+	if (data) {
+		glTextureSubImage2D(texture.internal_id,
+				0,
+				offset.x,
+				offset.y,
+				size.x,
+				size.y,
+				texture_format,
+				GL_UNSIGNED_BYTE,
+				data);
+	}
 }
 
 bool load_texture(const std::filesystem::path& path, Texture& out_texture) {

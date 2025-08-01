@@ -613,11 +613,42 @@ std::filesystem::path read_shortcut_path(const std::filesystem::path& path) {
 	return {};
 }
 
+static RunFileResult run_executable_file(const std::filesystem::path& path) {
+	PROFILE_FUNCTION();
+
+	STARTUPINFO start_up_info;
+	PROCESS_INFORMATION process_info;
+
+	ZeroMemory(&start_up_info, sizeof(start_up_info));
+	ZeroMemory(&process_info, sizeof(process_info));
+
+	start_up_info.cb = sizeof(start_up_info);
+
+	std::filesystem::path working_directory = path.parent_path();
+
+	bool result = CreateProcessW(path.c_str(), 
+			L"",
+			nullptr, nullptr, 
+			false, 0, nullptr,
+			working_directory.c_str(),
+			&start_up_info,
+			&process_info);
+
+	CloseHandle(process_info.hProcess);
+	CloseHandle(process_info.hThread);
+
+	return result ? RunFileResult::Ok : RunFileResult::OtherError;
+}
+
 RunFileResult run_file(const std::filesystem::path& path, bool run_as_admin) {
 	PROFILE_FUNCTION();
 
 	if (!std::filesystem::exists(path)) {
 		return RunFileResult::PathNotFound;
+	}
+
+	if (!run_as_admin && path.extension() == ".exe") {
+		return run_executable_file(path);
 	}
 
 	// NOTE: open - is can be used to lauch an exe

@@ -297,9 +297,17 @@ EntryAction draw_result_entry(const ResultEntry& match,
 
 void append_entry(std::vector<Entry>& entries, const std::filesystem::path& path) {
 	PROFILE_FUNCTION();
+	
 	Entry& entry = entries.emplace_back();
 	entry.name = path.filename().replace_extension("").wstring();
-	entry.path = path;
+
+	if (path.extension() == ".lnk") {
+		std::filesystem::path resolved_path = read_shortcut_path(path);
+
+		entry.path = resolved_path;
+	} else {
+		entry.path = path;
+	}
 }
 
 void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entries) {
@@ -365,17 +373,20 @@ void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage
 	PROFILE_FUNCTION();
 
 	for (auto& entry : entries) {
-		if (entry.path.extension() != ".lnk") {
-			continue;
+		bool is_shortcut = false;
+
+		std::filesystem::path resolved_path;
+
+		if (entry.path.extension() == ".lnk") {
+			is_shortcut = true;
+			resolved_path = read_shortcut_path(entry.path);
+
+			if (!std::filesystem::exists(resolved_path)) {
+				continue;
+			}
 		}
 
-		std::filesystem::path resolved_path = read_shortcut_path(entry.path);
-
-		if (!std::filesystem::exists(resolved_path)) {
-			continue;
-		}
-
-		Bitmap bitmap = get_file_icon(resolved_path);
+		Bitmap bitmap = get_file_icon(is_shortcut ? resolved_path : entry.path);
 		if (bitmap.pixels) {
 			entry.icon = store_app_icon(app_icon_storage, bitmap.pixels);
 			delete[] bitmap.pixels;

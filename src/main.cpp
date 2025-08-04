@@ -233,6 +233,64 @@ uint32_t compute_logest_common_subsequence(
 			}
 		}
 	}
+
+	// Generate highlight ranges
+	{
+		struct BacktrackEntry {
+			LCSDirection direction;
+			uint32_t y;
+		};
+
+		std::vector<BacktrackEntry> backtrack;
+
+		UVec2 position = UVec2 { (uint32_t)(grid_width - 1), (uint32_t)(grid_height - 1) };
+		while (true) {
+			LCSCell& cell = cells[position.y * grid_width + position.x];
+
+			if (cell.direction == LCSDirection::None) {
+				break;
+			}
+
+			backtrack.insert(backtrack.begin(), BacktrackEntry { .direction = cell.direction, .y = position.y - 1 });
+
+			switch (cell.direction) {
+			case LCSDirection::Vertical:
+				position.y -= 1;
+				break;
+			case LCSDirection::Horizontal:
+				position.x -= 1;
+				break;
+			case LCSDirection::Diagonal:
+				position.x -= 1;
+				position.y -= 1;
+				break;
+			}
+		}
+
+		RangeU32 range{};
+		for (size_t i = 0; i < backtrack.size(); i++) {
+			if (backtrack[i].direction == LCSDirection::Diagonal) {
+				if (range.count == 0) {
+					range.start = backtrack[i].y;
+					range.count = 1;
+				} else {
+					range.count += 1;
+				}
+			} else {
+				if (range.count != 0) {
+					sequence_ranges.push_back(range);
+					highlight_range.count += 1;
+
+					range.count = 0;
+				}
+			}
+		}
+
+		if (range.count > 0) {
+			sequence_ranges.push_back(range);
+			highlight_range.count += 1;
+		}
+	}
 	
 	uint16_t score = cells[(grid_height - 1) * grid_width + (grid_width - 1)].value;
 	delete[] cells;

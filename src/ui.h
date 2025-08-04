@@ -62,6 +62,10 @@ struct Theme {
 	Vec2 frame_padding;
 };
 
+//
+// Text input
+//
+
 struct TextInputState {
 	size_t cursor_position;
 	size_t text_length;

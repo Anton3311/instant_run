@@ -335,8 +335,19 @@ static bool text_input_behaviour(TextInputState& input_state) {
 				case KeyCode::Backspace:
 					if (input_state.text_length > 0) {
 						input_state.text_length -= 1;
+						input_state.cursor_position -= 1;
 						changed = true;
 					} 
+					break;
+				case KeyCode::ArrowLeft:
+					if (input_state.cursor_position > 0) {
+						input_state.cursor_position -= 1;
+					}
+					break;
+				case KeyCode::ArrowRight:
+					if (input_state.cursor_position < input_state.text_length) {
+						input_state.cursor_position += 1;
+					}
 					break;
 				default:
 					break;
@@ -358,6 +369,7 @@ static bool text_input_behaviour(TextInputState& input_state) {
 						&& (uint32_t)char_event.c < char_range_end) {
 					input_state.buffer.values[input_state.text_length] = char_event.c;
 					input_state.text_length += 1;
+					input_state.cursor_position += 1;
 
 					changed = true;
 				}
@@ -384,7 +396,14 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 
 	std::wstring_view text(input_state.buffer.values, input_state.text_length);
 
-	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
+	// Compute text size
+	std::wstring_view text_before_cursor = text.substr(0, input_state.cursor_position);
+	std::wstring_view text_after_cursor = text.substr(input_state.cursor_position);
+
+	Vec2 text_before_cursor_size = compute_text_size(*s_ui_state.theme.default_font, text_before_cursor);
+	Vec2 text_after_cursor_size = compute_text_size(*s_ui_state.theme.default_font, text_after_cursor);
+
+	Vec2 text_size = Vec2 { text_before_cursor_size.x + text_after_cursor_size.x, s_ui_state.theme.default_font->size };
 	Vec2 text_field_size{};
 
 	switch (s_ui_state.layout.next_item_size_constraint) {
@@ -418,9 +437,7 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 		draw_text(prompt, text_position, *s_ui_state.theme.default_font, s_ui_state.theme.prompt_text_color);
 	}
 
-	Vec2 text_cursor_position = text_position;
-	text_cursor_position.x += text_size.x;
-
+	Vec2 text_cursor_position = text_position + Vec2 { text_before_cursor_size.x, 0.0f };
 	draw_rect(Rect { text_cursor_position, text_cursor_position + Vec2 { 2.0f, text_size.y } }, WHITE);
 
 	return changed;

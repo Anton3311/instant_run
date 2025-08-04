@@ -136,7 +136,7 @@ inline wchar_t to_lower_case(wchar_t c) {
 	return c;
 }
 
-uint32_t compute_logest_common_subsequence(
+uint32_t compute_logest_common_substring(
 		const std::wstring_view& string,
 		const std::wstring_view& pattern,
 		std::vector<RangeU32>& sequence_ranges,
@@ -171,6 +171,73 @@ uint32_t compute_logest_common_subsequence(
 	}
 
 	return result;
+}
+
+enum class LCSDirection : uint16_t {
+	None,
+	Diagonal,
+	Horizontal,
+	Vertical
+};
+
+struct LCSCell {
+	uint16_t value;
+	LCSDirection direction;
+};
+
+uint32_t compute_logest_common_subsequence(
+		const std::wstring_view& string,
+		const std::wstring_view& pattern,
+		std::vector<RangeU32>& sequence_ranges,
+		RangeU32& highlight_range) {
+	PROFILE_FUNCTION();
+
+	if (string.length() == 0 || pattern.length() == 0) {
+		return 0;
+	}
+
+	size_t grid_width = pattern.length() + 1;
+	size_t grid_height = string.length() + 1;
+	LCSCell* cells = new LCSCell[grid_width * grid_height];
+
+	std::memset(cells, 0, sizeof(LCSCell) * grid_width * grid_height);
+
+	highlight_range.start = static_cast<uint32_t>(sequence_ranges.size());
+
+	for (size_t y = 1; y <= string.length(); y++) {
+		for (size_t x = 1; x <= pattern.length(); x++) {
+			LCSCell& current_cell = cells[y * grid_width + x];
+	
+			wchar_t string_char = to_lower_case(string[y - 1]);
+			wchar_t pattern_char = to_lower_case(pattern[x - 1]);
+			if (string_char == pattern_char) {
+				 current_cell = LCSCell {
+					.value = (uint16_t)(cells[(y - 1) * grid_width + x - 1].value + 1),
+					.direction = LCSDirection::Diagonal
+				};
+			} else {
+				LCSCell& horizontal = cells[y * grid_width + x - 1];
+				LCSCell& vertical = cells[(y - 1) * grid_width + x];
+
+				if (horizontal.value > vertical.value) {
+					current_cell = LCSCell {
+						.value = horizontal.value,
+						.direction = LCSDirection::Horizontal
+					};
+				} else {
+					current_cell = LCSCell {
+						.value = vertical.value,
+						.direction = LCSDirection::Vertical
+					};
+				}
+			}
+		}
+	}
+	
+	uint16_t score = cells[(grid_height - 1) * grid_width + (grid_width - 1)].value;
+	delete[] cells;
+
+	return score;
 }
 
 void update_search_result(std::wstring_view search_pattern,
@@ -396,6 +463,14 @@ void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage
 
 int main()
 {
+#if 0
+	{
+		std::vector<RangeU32> a;
+		RangeU32 b{};
+		compute_logest_common_subsequence(L"Paint", L"Chrome", a, b);
+	}
+#endif
+
 	initialize_platform();
 
 	Window* window = create_window(800, 500, L"Instant Run");

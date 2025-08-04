@@ -626,8 +626,12 @@ static RunFileResult run_executable_file(const std::filesystem::path& path) {
 
 	std::filesystem::path working_directory = path.parent_path();
 
+	// HACK: Don't why, but the command line arguments must be a mutable string
+	wchar_t command_line_arguments[1];
+	command_line_arguments[0] = 0;
+
 	bool result = CreateProcessW(path.c_str(), 
-			L"",
+			command_line_arguments,
 			nullptr, nullptr, 
 			false, 0, nullptr,
 			working_directory.c_str(),

@@ -169,6 +169,9 @@ void begin_frame() {
 			s_ui_state.has_typed_char = true;
 			s_ui_state.typed_char = events[i].data.char_typed.c;
 			break;
+		case WindowEventKind::Key:
+			// TODO: Handle
+			break;
 		}
 	}
 
@@ -325,8 +328,7 @@ static bool text_input_behaviour(TextInputState& input_state) {
 	Span<const WindowEvent> events = get_window_events(s_ui_state.window);
 	for (size_t i = 0; i < events.count; i++) {
 		switch (events[i].kind) {
-		case WindowEventKind::Key:
-		{
+		case WindowEventKind::Key: {
 			auto& key_event = events[i].data.key;
 			if (key_event.action == InputAction::Pressed) {
 				switch (key_event.code) {
@@ -336,13 +338,14 @@ static bool text_input_behaviour(TextInputState& input_state) {
 						changed = true;
 					} 
 					break;
+				default:
+					break;
 				}
 			}
 
 			break;
 		}
-		case WindowEventKind::CharTyped:
-		{
+		case WindowEventKind::CharTyped: {
 			auto& char_event = events[i].data.char_typed;
 			
 			if (input_state.text_length < input_state.buffer.count) {
@@ -362,6 +365,8 @@ static bool text_input_behaviour(TextInputState& input_state) {
 
 			break;
 		}
+		default:
+			break;
 		}
 	}
 

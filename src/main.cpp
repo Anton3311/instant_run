@@ -264,6 +264,8 @@ uint32_t compute_logest_common_subsequence(
 				position.x -= 1;
 				position.y -= 1;
 				break;
+			case LCSDirection::None:
+				break;
 			}
 		}
 
@@ -456,6 +458,8 @@ void process_result_view_key_event(ResultViewState& state, KeyCode key) {
 	case KeyCode::ArrowDown:
 		state.selected_index = (state.selected_index + 1) % result_count;
 		break;
+	default:
+		break;
 	}
 }
 
@@ -639,6 +643,8 @@ int main()
 				}
 				break;
 		    }
+			default:
+				break;
 			}
 		}
 

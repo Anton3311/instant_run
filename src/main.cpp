@@ -446,6 +446,23 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		ui::end_horizontal_layout();
 	}
 
+	float icon_size = font_get_height(*theme.default_font);
+
+	{
+		ui::WidgetStyle close_icon_style = theme.default_button_style;
+		close_icon_style.color = TRANSPARENT;
+		close_icon_style.hovered_color = TRANSPARENT;
+		close_icon_style.pressed_color = TRANSPARENT;
+
+		if (ui::icon_button(icons.texture, icons.close, &close_icon_style, &icon_size)) {
+			action = EntryAction::LaunchAsAdmin;
+		}
+
+		if (ui::icon_button(icons.texture, icons.close, &close_icon_style, &icon_size)) {
+			action = EntryAction::CopyPath;
+		}
+	}
+
 	ui::end_horizontal_layout();
 
 	return action;

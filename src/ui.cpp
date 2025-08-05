@@ -317,12 +317,12 @@ bool button(std::wstring_view text) {
 	return pressed && hovered;
 }
 
-bool icon_button(const Texture& texture, Rect uv_rect, const WidgetStyle* style) {
+bool icon_button(const Texture& texture, Rect uv_rect, const WidgetStyle* style, const float* prefered_size) {
 	if (style == nullptr) {
 		style = &s_ui_state.theme.default_button_style;
 	}
 
-	float button_size = get_default_widget_height();
+	float button_size = prefered_size ? (*prefered_size) : get_default_widget_height();
 
 	add_item(Vec2 { button_size, button_size });
 
@@ -335,7 +335,7 @@ bool icon_button(const Texture& texture, Rect uv_rect, const WidgetStyle* style)
 	bool hovered = is_item_hovered();
 	bool pressed = s_ui_state.mouse_button_states[(size_t)MouseButton::Left] == MouseButtonState::Pressed;
 
-	Color button_color = s_ui_state.theme.widget_color;
+	Color button_color = style->color;
 	Color icon_color = s_ui_state.theme.icon_color;
 
 	if (pressed && hovered) {

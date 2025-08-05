@@ -367,7 +367,13 @@ static bool text_input_behaviour(TextInputState& input_state) {
 
 				if ((uint32_t)char_event.c >= s_ui_state.theme.default_font->char_range_start
 						&& (uint32_t)char_event.c < char_range_end) {
-					input_state.buffer.values[input_state.text_length] = char_event.c;
+					
+					size_t after_cursor_text_length = input_state.text_length - input_state.cursor_position;
+					for (int64_t i = input_state.text_length; i > input_state.cursor_position; i--) {
+						input_state.buffer.values[i] = input_state.buffer.values[i - 1];
+					}
+
+					input_state.buffer.values[input_state.cursor_position] = char_event.c;
 					input_state.text_length += 1;
 					input_state.cursor_position += 1;
 

@@ -83,7 +83,7 @@ struct ResultEntry {
 struct ResultViewState {
 	uint32_t selected_index;
 	uint32_t scroll_offset;
-	uint32_t visible_item_count;
+	uint32_t fully_visible_item_count;
 	
 	std::vector<ResultEntry> matches;
 	std::vector<RangeU32> highlights;
@@ -412,41 +412,39 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		} else {
 			draw_rounded_rect(ui::get_item_bounds(), WHITE, theme.frame_corner_radius);
 		}
-
-		ui::append_item_spacing(theme.default_layout_config.item_spacing * 2.0f);
 	}
 
-	uint32_t cursor = 0;
-	for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
-		RangeU32 highlight_range = state.highlights[i];
+	{
+		ui::LayoutConfig layout_config{};
+		ui::begin_horizontal_layout(&layout_config);
+		uint32_t cursor = 0;
+		for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
+			RangeU32 highlight_range = state.highlights[i];
 
-		if (cursor != highlight_range.start) {
+			if (cursor != highlight_range.start) {
+				std::wstring_view t = std::wstring_view(entry.name)
+					.substr(cursor, highlight_range.start - cursor);
+
+				ui::text(t);
+			}
+
+			std::wstring_view highlighted_text = std::wstring_view(entry.name)
+				.substr(highlight_range.start, highlight_range.count);
+
+			ui::colored_text(highlighted_text, highlight_color);
+
+			cursor = highlight_range.start + highlight_range.count;
+		}
+
+		if (cursor < entry.name.length()) {
 			std::wstring_view t = std::wstring_view(entry.name)
-				.substr(cursor, highlight_range.start - cursor);
+				.substr(cursor);
 
 			ui::text(t);
 		}
 
-		std::wstring_view highlighted_text = std::wstring_view(entry.name)
-			.substr(highlight_range.start, highlight_range.count);
-
-		ui::colored_text(highlighted_text, highlight_color);
-
-		cursor = highlight_range.start + highlight_range.count;
+		ui::end_horizontal_layout();
 	}
-
-	if (cursor < entry.name.length()) {
-		std::wstring_view t = std::wstring_view(entry.name)
-			.substr(cursor);
-
-		ui::text(t);
-	}
-
-#if 0
-	if (ui::icon_button(icons.texture, icons.close)) {
-		action = EntryAction::CopyPath;
-	}
-#endif
 
 	ui::end_horizontal_layout();
 
@@ -495,7 +493,7 @@ void process_result_view_key_event(ResultViewState& state, KeyCode key) {
 }
 
 void update_result_view_scroll(ResultViewState& state) {
-	uint32_t visible_range_end = state.scroll_offset + state.visible_item_count;
+	uint32_t visible_range_end = state.scroll_offset + state.fully_visible_item_count;
 	bool is_selection_visible = state.selected_index >= state.scroll_offset && state.selected_index < visible_range_end;
 
 	if (is_selection_visible) {
@@ -705,15 +703,24 @@ int main()
 
 		ui::separator();
 
-		float available_height = ui::get_available_layout_space();
-		float item_height = compute_result_entry_height(theme) + theme.default_layout_config.item_spacing;
+		ui::LayoutConfig result_list_layout_config{};
+		result_list_layout_config.padding = Vec2{};
+		result_list_layout_config.allow_overflow = true;
+		result_list_layout_config.item_spacing = theme.default_layout_config.item_spacing;
+		ui::begin_vertical_layout(&result_list_layout_config);
 
-		result_view_state.visible_item_count = std::floor(available_height / item_height);
+		float available_height = ui::get_available_layout_space();
+		float item_height = compute_result_entry_height(theme);
+		float item_spacing = theme.default_layout_config.item_spacing;
+
+		float item_count = (available_height + item_spacing) / (item_height + item_spacing);
+		result_view_state.fully_visible_item_count = std::floor(item_count);
+		uint32_t partially_visible_item_count = (uint32_t)std::ceil(item_count);
 
 		update_result_view_scroll(result_view_state);
 
 		uint32_t visible_item_count = std::min(
-				result_view_state.visible_item_count,
+				partially_visible_item_count,
 				(uint32_t)result_view_state.matches.size() - result_view_state.scroll_offset);
 
 		for (uint32_t i = result_view_state.scroll_offset; i < result_view_state.scroll_offset + visible_item_count; i++) {
@@ -748,6 +755,8 @@ int main()
 				break;
 			}
 		}
+
+		ui::end_vertical_layout();
 
 		ui::end_frame();
 		end_frame();

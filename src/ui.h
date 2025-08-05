@@ -23,6 +23,7 @@ enum class SizeConstraint {
 struct LayoutConfig {
 	float item_spacing;
 	Vec2 padding;
+	bool allow_overflow;
 };
 
 struct WidgetStyle {

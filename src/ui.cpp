@@ -101,7 +101,10 @@ void add_item(Vec2 size) {
 
 	Rect item_rect = s_ui_state.last_item.bounds;
 	Rect max_content_bounds = layout.content_bounds;
-	compute_overflow_rects(item_rect, max_content_bounds);
+
+	if (!layout.config.allow_overflow) {
+		compute_overflow_rects(item_rect, max_content_bounds);
+	}
 
 	// Clamp the item rect to the `max_content_bounds`
 	Rect padded_item_rect = Rect {

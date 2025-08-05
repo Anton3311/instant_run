@@ -459,7 +459,7 @@ std::vector<std::filesystem::path> get_start_menu_folder_path() {
 	return results;
 }
 
-Bitmap get_file_icon(const std::filesystem::path& path) {
+Bitmap get_file_icon(const std::filesystem::path& path, Arena& arena) {
 	PROFILE_FUNCTION();
 	if (!std::filesystem::exists(path)) {
 		return {};
@@ -490,7 +490,7 @@ Bitmap get_file_icon(const std::filesystem::path& path) {
 	bitmap_size.cy = bitmap.bmHeight;
 
 	size_t pixel_count = bitmap_size.cx * bitmap_size.cy;
-	uint32_t* pixels = new uint32_t[pixel_count * 4];
+	uint32_t* pixels = arena_alloc_array<uint32_t>(arena, pixel_count);
 
 	BITMAPINFO bmi{};
 	bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);

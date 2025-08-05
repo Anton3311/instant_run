@@ -517,7 +517,7 @@ Rect create_icon(UVec2 position, const Texture& texture) {
 	return Rect { Vec2 { x, y }, Vec2 { x + icon_width_uv, y + icon_height_uv } };
 }
 
-void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage& app_icon_storage) {
+void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage& app_icon_storage, Arena& arena) {
 	PROFILE_FUNCTION();
 
 	for (auto& entry : entries) {
@@ -534,11 +534,13 @@ void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage
 			}
 		}
 
-		Bitmap bitmap = get_file_icon(is_shortcut ? resolved_path : entry.path);
+		ArenaSavePoint temp_region = arena_begin_temp(arena);
+		Bitmap bitmap = get_file_icon(is_shortcut ? resolved_path : entry.path, arena);
 		if (bitmap.pixels) {
 			entry.icon = store_app_icon(app_icon_storage, bitmap.pixels);
-			delete[] bitmap.pixels;
 		}
+
+		arena_end_temp(temp_region);
 	}
 }
 
@@ -623,7 +625,7 @@ int main()
 		std::cout << e.what() << '\n';
 	}
 
-	load_application_icons(entries, app_icon_storage);
+	load_application_icons(entries, app_icon_storage, arena);
 
 	ResultViewState result_view_state{};
 

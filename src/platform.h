@@ -108,7 +108,7 @@ struct Bitmap {
 	uint32_t* pixels;
 };
 
-Bitmap get_file_icon(const std::filesystem::path& path);
+Bitmap get_file_icon(const std::filesystem::path& path, Arena& arena);
 std::filesystem::path read_symlink_path(const std::filesystem::path& path);
 std::filesystem::path read_shortcut_path(const std::filesystem::path& path);
 

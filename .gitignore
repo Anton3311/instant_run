@@ -3,3 +3,4 @@
 *.pdb
 *.rdi
 *.o
+*.tracy

@@ -2,9 +2,7 @@
 
 #include <stdint.h>
 
-#define PROFILING_ENABLED 1
-
-#if PROFILING_ENABLED
+#ifdef ENABLE_PROFILING 
 #include <tracy/Tracy.hpp>
 
 #define PROFILE_SCOPE(name) ZoneScopedN(name)

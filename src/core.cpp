@@ -1,5 +1,7 @@
 #include "core.h"
 
+#include <assert.h>
+#include <stdio.h>
 #include <windows.h>
 
 typedef struct {
@@ -9,6 +11,7 @@ typedef struct {
 static SystemMemorysSpec s_sys_mem_spec;
 
 void query_system_memory_spec() {
+	PROFILE_FUNCTION();
 	if (s_sys_mem_spec.page_size != 0) {
 		return;
 	}
@@ -29,6 +32,7 @@ size_t align_to_page_size(size_t bytes) {
 }
 
 void arena_reserve(Arena& arena, size_t initial_size) {
+	PROFILE_FUNCTION();
 	assert(initial_size < arena.capacity);
 
 	size_t aligned_allocation = align(initial_size, s_sys_mem_spec.page_size);
@@ -46,6 +50,7 @@ void arena_reserve(Arena& arena, size_t initial_size) {
 }
 
 void arena_commit_page(Arena& arena, size_t page_count) {
+	PROFILE_FUNCTION();
 	size_t commit_size = page_count * s_sys_mem_spec.page_size;
 	if (arena.commited + page_count >= arena.capacity) {
 		printf("Out of arena memory");

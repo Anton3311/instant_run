@@ -22,6 +22,9 @@ struct Icons {
 	Rect close;
 	Rect enter;
 	Rect nav;
+	Rect run;
+	Rect run_as_admin;
+	Rect copy;
 };
 
 void initialize_app_icon_storage(ApplicationIconsStorage& storage, uint32_t icon_size, uint32_t grid_size) {
@@ -446,19 +449,33 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		ui::end_horizontal_layout();
 	}
 
-	float icon_size = font_get_height(*theme.default_font);
-
+	if (hovered || is_selected)
 	{
+		float icon_size = font_get_height(*theme.default_font);
+		float available_width = ui::get_available_layout_space();
+
+		uint32_t icon_button_count = 3;
+		float icon_row_width = (float)icon_button_count * icon_size + (float)(icon_button_count - 1) * theme.default_layout_config.item_spacing;
+
+		Vec2 cursor = ui::get_cursor();
+		cursor.x += available_width - icon_row_width;
+
+		ui::set_cursor(cursor);
+
 		ui::WidgetStyle close_icon_style = theme.default_button_style;
 		close_icon_style.color = TRANSPARENT;
 		close_icon_style.hovered_color = TRANSPARENT;
 		close_icon_style.pressed_color = TRANSPARENT;
 
-		if (ui::icon_button(icons.texture, icons.close, &close_icon_style, &icon_size)) {
+		if (ui::icon_button(icons.texture, icons.run, &close_icon_style, &icon_size)) {
+			action = EntryAction::Launch;
+		}
+
+		if (ui::icon_button(icons.texture, icons.run_as_admin, &close_icon_style, &icon_size)) {
 			action = EntryAction::LaunchAsAdmin;
 		}
 
-		if (ui::icon_button(icons.texture, icons.close, &close_icon_style, &icon_size)) {
+		if (ui::icon_button(icons.texture, icons.copy, &close_icon_style, &icon_size)) {
 			action = EntryAction::CopyPath;
 		}
 	}
@@ -583,6 +600,9 @@ int main()
 	icons.close = create_icon(UVec2 { 1, 0 }, icons.texture);
 	icons.enter = create_icon(UVec2 { 2, 0 }, icons.texture);
 	icons.nav = create_icon(UVec2 { 3, 0 }, icons.texture);
+	icons.run = create_icon(UVec2 { 0, 1 }, icons.texture);
+	icons.run_as_admin = create_icon(UVec2 { 1, 1 }, icons.texture);
+	icons.copy = create_icon(UVec2 { 2, 1 }, icons.texture);
 
 	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f, arena);
 	ui::Theme theme{};

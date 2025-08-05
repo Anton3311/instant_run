@@ -20,10 +20,17 @@ enum class SizeConstraint {
 	Fixed,
 };
 
+enum class AxisAlignment {
+	Start,
+	Center,
+	End,
+};
+
 struct LayoutConfig {
 	float item_spacing;
 	Vec2 padding;
 	bool allow_overflow;
+	AxisAlignment cross_axis_align;
 };
 
 struct WidgetStyle {

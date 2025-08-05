@@ -86,9 +86,51 @@ void compute_overflow_rects(Rect item_rect, Rect max_content_bounds) {
 	}
 }
 
+// Applies the current layout to the `item_rect`, without modifing the layout state
+Rect layout_item_rect(Rect item_rect) {
+	Vec2 available_space = get_available_layout_region_size();
+
+	Vec2 item_size = item_rect.size();
+	Rect result = item_rect;
+
+	const LayoutState& layout = s_ui_state.layout;
+	switch (layout.kind) {
+	case LayoutKind::Vertical:
+		// For a vertical layout (a column), AxisAlignment::Start means align items left,
+		// AxisAlignment::Center - center, AxisAlignment - right
+		switch (layout.config.cross_axis_align) {
+		case AxisAlignment::Start:
+			// Do nothing, already aligned 
+			break;
+		}
+
+		break;
+	case LayoutKind::Horizontal:
+		// For a horizontal layout (a row), AxisAlignment::Start means align items to the top,
+		// AxisAlignment::Center - center, AxisAlignment - to the bottom
+		switch (layout.config.cross_axis_align) {
+		case AxisAlignment::Start:
+			// Do nothing, already aligned 
+			break;
+		case AxisAlignment::Center: {
+			float max_row_height = layout.content_bounds.height();
+			float offset = (max_row_height - item_size.y) / 2.0f;
+			result.min.y += offset;
+			result.max.y += offset;
+			break;
+		}
+		}
+
+		break;
+	}
+
+	return result;
+}
+
 void add_item(Vec2 size) {
+	PROFILE_FUNCTION();
 	LayoutState& layout = s_ui_state.layout;
-	s_ui_state.last_item.bounds = Rect { layout.cursor, layout.cursor + size };
+	s_ui_state.last_item.bounds = layout_item_rect(Rect { layout.cursor, layout.cursor + size });
 
 	switch (layout.kind) {
 	case LayoutKind::Vertical:
@@ -603,15 +645,20 @@ void begin_horizontal_layout(const LayoutConfig* config, const float* prefered_h
 	content_bounds.min = cursor + config->padding;
 	content_bounds.max = s_ui_state.layout.content_bounds.max - config->padding;
 
+	Rect bounds = Rect{ cursor, cursor + config->padding * 2.0f };
+
 	if (prefered_height != nullptr) {
 		content_bounds.max.y = content_bounds.min.y + *prefered_height - config->padding.y;
+		
+		// NOTE: padding is already included once in the bounds.min
+		bounds.max.y = bounds.min.y + *prefered_height + config->padding.y;
 	}
 
 	s_ui_state.layout_stack.push_back(s_ui_state.layout);
 
 	s_ui_state.layout = LayoutState {
 		.kind = LayoutKind::Horizontal,
-		.bounds = Rect{ cursor, cursor + config->padding * 2.0f },
+		.bounds = bounds,
 		.content_bounds = content_bounds,
 		.cursor = content_bounds.min,
 		.config = *config

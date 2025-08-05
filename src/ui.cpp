@@ -254,6 +254,8 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text) {
 	Vec2 char_position{};
 	float text_width = 0.0f;
 
+	float scale = stbtt_ScaleForPixelHeight(&font.info, font.size);
+
 	for (size_t i = 0; i < text.size(); i++) {
 		uint32_t c = text[i];
 
@@ -271,15 +273,20 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text) {
 				&quad,
 				1);
 
-		Vec2 char_size = Vec2(quad.x1 - quad.x0, quad.y1 - quad.y0);
+		int32_t kerning_advance = 0;
+		if (i + 1 < text.size()) {
+			kerning_advance = stbtt_GetCodepointKernAdvance(&font.info, text[i], text[i + 1]);
+			char_position.x += (float)(kerning_advance) * scale;
+		}
+
 		text_width = char_position.x;
 	}
 
-	return Vec2 { text_width, font.size };
+	return Vec2 { text_width, font_get_height(font) };
 }
 
 float get_default_widget_height() {
-	return s_ui_state.theme.default_font->size + s_ui_state.theme.frame_padding.y * 2.0f;
+	return font_get_height(*s_ui_state.theme.default_font) + s_ui_state.theme.frame_padding.y * 2.0f;
 }
 
 bool button(std::wstring_view text) {
@@ -490,6 +497,7 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 	}
 
 	Vec2 text_cursor_position = text_position + Vec2 { text_before_cursor_size.x, 0.0f };
+	float cursor_height = (float)(s_ui_state.theme.default_font->ascent - s_ui_state.theme.default_font->descent);
 	draw_rect(Rect { text_cursor_position, text_cursor_position + Vec2 { 2.0f, text_size.y } }, WHITE);
 
 	return changed;

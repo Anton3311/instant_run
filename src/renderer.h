@@ -24,11 +24,17 @@ struct Texture {
 struct Font {
 	float size;
 	size_t glyph_count;
+	stbtt_fontinfo info;
 	stbtt_bakedchar* glyphs;
 
 	uint32_t char_range_start;
 
 	Texture atlas;
+
+	// Metrics
+	int32_t ascent; // coordinate above baseline
+	int32_t descent; // coordinate below baseline
+	int32_t line_gap;
 };
 
 void initialize_renderer(Window* window);
@@ -40,8 +46,10 @@ bool load_texture(const std::filesystem::path& path, Texture& out_texture);
 void delete_texture(const Texture& texture);
 
 Font create_font(const uint8_t* data, size_t data_size, float font_size);
-Font load_font_from_file(const std::filesystem::path& path, float font_size);
+Font load_font_from_file(const std::filesystem::path& path, float font_size, Arena& arena);
 void delete_font(const Font& font);
+
+float font_get_height(const Font& font);
 
 void begin_frame();
 void end_frame();

@@ -379,6 +379,12 @@ Font create_font(const uint8_t* data, size_t data_size, float font_size) {
 	font.glyphs = new stbtt_bakedchar[font.glyph_count];
 	font.size = font_size;
 
+	if (!stbtt_InitFont(&font.info, data, 0)) {
+		return Font{};
+	}
+
+	stbtt_GetFontVMetrics(&font.info, &font.ascent, &font.descent, &font.line_gap);
+
 	int32_t texture_size = 512;
 	size_t pixel_count = static_cast<size_t>(texture_size) * static_cast<size_t>(texture_size);
 
@@ -410,7 +416,7 @@ Font create_font(const uint8_t* data, size_t data_size, float font_size) {
 	return font;
 }
 
-Font load_font_from_file(const std::filesystem::path& path, float font_size) {
+Font load_font_from_file(const std::filesystem::path& path, float font_size, Arena& arena) {
 	PROFILE_FUNCTION();
 	std::ifstream stream(path, std::ios::binary);
 
@@ -421,14 +427,10 @@ Font load_font_from_file(const std::filesystem::path& path, float font_size) {
 	// FIXME: get the actual file size
 	size_t file_size = 1 << 20;
 
-	uint8_t* font_data = new uint8_t[file_size];
+	uint8_t* font_data = reinterpret_cast<uint8_t*>(arena_alloc_aligned(arena, file_size, 16));
 	stream.read(reinterpret_cast<char*>(font_data), file_size);
 
-	Font font = create_font(font_data, file_size, font_size);
-
-	delete[] font_data;
-
-	return font;
+	return create_font(font_data, file_size, font_size);
 }
 
 void delete_font(const Font& font) {
@@ -436,6 +438,11 @@ void delete_font(const Font& font) {
 	delete_texture(font.atlas);
 
 	delete[] font.glyphs;
+}
+
+float font_get_height(const Font& font) {
+	float scale = stbtt_ScaleForPixelHeight(&font.info, font.size);
+	return (float)(font.ascent - font.descent) * scale;
 }
 
 void begin_frame() {
@@ -667,13 +674,14 @@ void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color co
 
 	push_texture(font.atlas);
 
+	float scale = stbtt_ScaleForPixelHeight(&font.info, font.size);
+
 	uint32_t color_value = color_to_uint32(color);
 	Vec2 char_position = position;
-	char_position.y += font.size;
+	char_position.y += (float)font.ascent * scale;
 
 	for (size_t i = 0; i < text.size(); i++) {
 		uint32_t c = text[i];
-
 		if (c < font.char_range_start || c >= font.char_range_start + font.glyph_count) {
 			continue;
 		}
@@ -687,6 +695,12 @@ void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color co
 				&char_position.y,
 				&quad,
 				1);
+
+		int32_t kerning_advance = 0;
+		if (i + 1 < text.size()) {
+			kerning_advance = stbtt_GetCodepointKernAdvance(&font.info, text[i], text[i + 1]);
+			char_position.x += (float)(kerning_advance) * scale;
+		}
 
 		Vec2 uv_min = Vec2(quad.s0, quad.t0);
 		Vec2 uv_max = Vec2(quad.s1, quad.t1);

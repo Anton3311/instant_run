@@ -362,8 +362,8 @@ enum class EntryAction {
 	CopyPath,
 };
 
-float compute_result_entry_height(const ui::Theme& theme) {
-	return theme.default_layout_config.padding.y * 2.0f + theme.default_font->size;
+float compute_result_entry_height() {
+	return ui::get_default_widget_height();
 }
 
 EntryAction draw_result_entry(const ResultEntry& match,
@@ -376,7 +376,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	PROFILE_FUNCTION();
 	const ui::Theme& theme = ui::get_theme();
 
-	const float item_height = compute_result_entry_height(theme);
+	const float item_height = compute_result_entry_height();
 	ui::begin_horizontal_layout(nullptr, &item_height);
 
 	Rect item_bounds = ui::get_max_layout_bounds();
@@ -567,7 +567,7 @@ int main()
 	icons.enter = create_icon(UVec2 { 2, 0 }, icons.texture);
 	icons.nav = create_icon(UVec2 { 3, 0 }, icons.texture);
 
-	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f);
+	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f, arena);
 	ui::Theme theme{};
 	theme.default_font = &font;
 
@@ -710,7 +710,7 @@ int main()
 		ui::begin_vertical_layout(&result_list_layout_config);
 
 		float available_height = ui::get_available_layout_space();
-		float item_height = compute_result_entry_height(theme);
+		float item_height = compute_result_entry_height();
 		float item_spacing = theme.default_layout_config.item_spacing;
 
 		float item_count = (available_height + item_spacing) / (item_height + item_spacing);

@@ -16,6 +16,14 @@ struct ApplicationIconsStorage {
 	uint32_t grid_size;
 };
 
+struct Icons {
+	Texture texture;
+	Rect search;
+	Rect close;
+	Rect enter;
+	Rect nav;
+};
+
 void initialize_app_icon_storage(ApplicationIconsStorage& storage, uint32_t icon_size, uint32_t grid_size) {
 	PROFILE_FUNCTION();
 	uint32_t texture_size = icon_size * grid_size;
@@ -350,26 +358,37 @@ void update_search_result(std::wstring_view search_pattern,
 enum class EntryAction {
 	None,
 	Launch,
+	LaunchAsAdmin,
+	CopyPath,
 };
+
+float compute_result_entry_height(const ui::Theme& theme) {
+	return theme.default_layout_config.padding.y * 2.0f + theme.default_font->size;
+}
 
 EntryAction draw_result_entry(const ResultEntry& match,
 		const Entry& entry,
 		const ResultViewState& state,
 		bool is_selected,
 		Color highlight_color,
-		const ApplicationIconsStorage& app_icon_storage) {
+		const ApplicationIconsStorage& app_icon_storage,
+		const Icons& icons) {
 	PROFILE_FUNCTION();
 	const ui::Theme& theme = ui::get_theme();
 
-	Vec2 available_region = ui::get_available_layout_region_size();
-	Vec2 widget_size = Vec2 { available_region.x, ui::get_default_widget_height() };
+	const float item_height = compute_result_entry_height(theme);
+	ui::begin_horizontal_layout(nullptr, &item_height);
 
-	ui::add_item(widget_size);
+	Rect item_bounds = ui::get_max_layout_bounds();
 
-	Rect item_bounds = ui::get_item_bounds();
+	EntryAction action = EntryAction::None;
 
-	bool hovered = ui::is_item_hovered();
+	bool hovered = ui::is_rect_hovered(item_bounds);
 	bool pressed = hovered && ui::is_mouse_button_pressed(MouseButton::Left);
+
+	if (pressed) {
+		action = EntryAction::Launch;
+	}
 
 	{
 
@@ -380,13 +399,6 @@ EntryAction draw_result_entry(const ResultEntry& match,
 
 		draw_rounded_rect(item_bounds, widget_color, theme.frame_corner_radius);
 	}
-
-	Vec2 saved_cursor = ui::get_cursor();
-	ui::set_cursor(item_bounds.min + theme.frame_padding);
-
-	ui::LayoutConfig layout_config{};
-
-	ui::begin_horizontal_layout(&layout_config);
 
 	{
 		// Icon
@@ -430,15 +442,15 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		ui::text(t);
 	}
 
+#if 0
+	if (ui::icon_button(icons.texture, icons.close)) {
+		action = EntryAction::CopyPath;
+	}
+#endif
+
 	ui::end_horizontal_layout();
 
-	ui::set_cursor(saved_cursor);
-
-	if (pressed) {
-		return EntryAction::Launch;
-	}
-
-	return EntryAction::None;
+	return action;
 }
 
 void append_entry(std::vector<Entry>& entries, const std::filesystem::path& path) {
@@ -497,13 +509,6 @@ void update_result_view_scroll(ResultViewState& state) {
 	}
 }
 
-struct Icons {
-	Rect search;
-	Rect close;
-	Rect enter;
-	Rect nav;
-};
-
 static constexpr float ICON_SIZE = 32.0f;
 
 Rect create_icon(UVec2 position, const Texture& texture) {
@@ -557,14 +562,12 @@ int main()
 
 	initialize_renderer(window);
 
-	Texture icons_texture{};
-	load_texture("./assets/icons.png", icons_texture);
-
 	Icons icons{};
-	icons.search = create_icon(UVec2 { 0, 0 }, icons_texture);
-	icons.close = create_icon(UVec2 { 1, 0 }, icons_texture);
-	icons.enter = create_icon(UVec2 { 2, 0 }, icons_texture);
-	icons.nav = create_icon(UVec2 { 3, 0 }, icons_texture);
+	load_texture("./assets/icons.png", icons.texture);
+	icons.search = create_icon(UVec2 { 0, 0 }, icons.texture);
+	icons.close = create_icon(UVec2 { 1, 0 }, icons.texture);
+	icons.enter = create_icon(UVec2 { 2, 0 }, icons.texture);
+	icons.nav = create_icon(UVec2 { 3, 0 }, icons.texture);
 
 	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f);
 	ui::Theme theme{};
@@ -592,7 +595,7 @@ int main()
 	theme.separator_color = color_from_hex(0x37373AFF);
 	theme.text_color = WHITE;
 	theme.prompt_text_color = color_from_hex(0x9E9E9EFF);
-	theme.default_layout_config.item_spacing = 4.0f;
+	theme.default_layout_config.item_spacing = 8.0f;
 	theme.default_layout_config.padding = Vec2 { 12.0f, 12.0f };
 	theme.frame_padding = Vec2 { 12.0f, 8.0f };
 	theme.frame_corner_radius = 4.0f;
@@ -613,6 +616,7 @@ int main()
 	ui::set_theme(theme);
 
 	ui::Options& options = ui::get_options();
+	options.debug_layout_overflow = true;
 
 	std::vector<Entry> entries;
 
@@ -676,7 +680,7 @@ int main()
 			float text_field_width = ui::get_available_layout_region_size().x
 				- (icon_width + theme.default_layout_config.item_spacing) * 2.0f;
 
-			ui::icon(icons_texture, icons.search);
+			ui::icon(icons.texture, icons.search);
 
 			ui::push_next_item_fixed_size(text_field_width);
 
@@ -692,7 +696,7 @@ int main()
 			close_icon_style.hovered_color = TRANSPARENT;
 			close_icon_style.pressed_color = TRANSPARENT;
 
-			if (ui::icon_button(icons_texture, icons.close, &close_icon_style)) {
+			if (ui::icon_button(icons.texture, icons.close, &close_icon_style)) {
 				input_state.text_length = 0;
 			}
 
@@ -702,9 +706,9 @@ int main()
 		ui::separator();
 
 		float available_height = ui::get_available_layout_space();
-		float item_height = ui::get_default_widget_height() + theme.default_layout_config.item_spacing;
+		float item_height = compute_result_entry_height(theme) + theme.default_layout_config.item_spacing;
 
-		result_view_state.visible_item_count = std::ceil(available_height / item_height);
+		result_view_state.visible_item_count = std::floor(available_height / item_height);
 
 		update_result_view_scroll(result_view_state);
 
@@ -723,14 +727,25 @@ int main()
 					result_view_state,
 					is_selected,
 					highlight_color,
-					app_icon_storage);
+					app_icon_storage,
+					icons);
 
-			if (is_selected && enter_pressed) {
+			if (action == EntryAction::None && is_selected && enter_pressed) {
 				action = EntryAction::Launch;
 			}
 
-			if (action == EntryAction::Launch) {
+			switch (action) {
+			case EntryAction::None:
+				break;
+			case EntryAction::Launch:
 				run_file(entry.path, false);
+				break;
+			case EntryAction::LaunchAsAdmin:
+				run_file(entry.path, true);
+				break;
+			case EntryAction::CopyPath:
+				std::wcout << entry.path << '\n';
+				break;
 			}
 		}
 
@@ -743,7 +758,7 @@ int main()
 	}
 
 	delete_texture(app_icon_storage.texture);
-	delete_texture(icons_texture);
+	delete_texture(icons.texture);
 	delete_font(font);
 
 	shutdown_renderer();

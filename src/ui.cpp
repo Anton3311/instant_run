@@ -5,6 +5,8 @@
 #include <cstring>
 #include <vector>
 
+// TODO: rename `content_bounds` to `max_content_bounds`
+
 namespace ui {
 
 struct ItemState {
@@ -49,6 +51,7 @@ struct State {
 	ItemState last_item;
 
 	std::vector<LayoutState> layout_stack;
+	std::vector<Rect> layout_overflow_rects;
 	LayoutState layout;
 };
 
@@ -60,6 +63,27 @@ static State s_ui_state;
 
 void initialize(const Window& window) {
 	s_ui_state.window = &window;
+}
+
+void compute_overflow_rects(Rect item_rect, Rect max_content_bounds) {
+	if (!s_ui_state.options.debug_layout_overflow)
+		return;
+
+	// TODO: Compute left and top overflow rects
+	
+	if (item_rect.max.y > max_content_bounds.max.y) {
+		s_ui_state.layout_overflow_rects.push_back(Rect {
+			Vec2 { item_rect.min.x, max_content_bounds.max.y },
+			item_rect.max,
+		});
+	}
+
+	if (item_rect.max.x > max_content_bounds.max.x) {
+		s_ui_state.layout_overflow_rects.push_back(Rect {
+			Vec2 { max_content_bounds.min.x, item_rect.min.y },
+			item_rect.max,
+		});
+	}
 }
 
 void add_item(Vec2 size) {
@@ -75,7 +99,16 @@ void add_item(Vec2 size) {
 		break;
 	}
 
-	Rect padded_item_rect = s_ui_state.last_item.bounds;
+	Rect item_rect = s_ui_state.last_item.bounds;
+	Rect max_content_bounds = layout.content_bounds;
+	compute_overflow_rects(item_rect, max_content_bounds);
+
+	// Clamp the item rect to the `max_content_bounds`
+	Rect padded_item_rect = Rect {
+		max(item_rect.min, max_content_bounds.min),
+			min(item_rect.max, max_content_bounds.max)
+	};
+
 	padded_item_rect.max += layout.config.padding;
 
 	layout.bounds = combine_rects(layout.bounds, padded_item_rect);
@@ -83,6 +116,10 @@ void add_item(Vec2 size) {
 
 bool is_item_hovered() {
 	return rect_contains_point(s_ui_state.last_item.bounds, s_ui_state.mouse_position);
+}
+
+bool is_rect_hovered(const Rect& rect) {
+	return rect_contains_point(rect, s_ui_state.mouse_position);
 }
 
 Rect get_item_bounds() {
@@ -188,6 +225,12 @@ void begin_frame() {
 void end_frame() {
 	PROFILE_FUNCTION();
 	end_vertical_layout();
+	
+	for (const Rect& overflow_rect : s_ui_state.layout_overflow_rects) {
+		draw_rect(overflow_rect, Color { 255, 0, 255, 100 });
+	}
+
+	s_ui_state.layout_overflow_rects.clear();
 }
 
 const Theme& get_theme() {
@@ -538,7 +581,7 @@ void end_vertical_layout() {
 	pop_layout();
 }
 
-void begin_horizontal_layout(const LayoutConfig* config) {
+void begin_horizontal_layout(const LayoutConfig* config, const float* prefered_height) {
 	if (config == nullptr) {
 		config = &s_ui_state.theme.default_layout_config;
 	}
@@ -548,6 +591,10 @@ void begin_horizontal_layout(const LayoutConfig* config) {
 	Rect content_bounds{};
 	content_bounds.min = cursor + config->padding;
 	content_bounds.max = s_ui_state.layout.content_bounds.max - config->padding;
+
+	if (prefered_height != nullptr) {
+		content_bounds.max.y = content_bounds.min.y + *prefered_height - config->padding.y;
+	}
 
 	s_ui_state.layout_stack.push_back(s_ui_state.layout);
 
@@ -562,6 +609,14 @@ void begin_horizontal_layout(const LayoutConfig* config) {
 
 void end_horizontal_layout() {
 	pop_layout();
+}
+
+Rect get_max_layout_bounds() {
+	auto& layout = s_ui_state.layout;
+	Rect bounds = layout.content_bounds;
+	bounds.min -= layout.config.padding;
+	bounds.max += layout.config.padding;
+	return bounds;
 }
 
 }

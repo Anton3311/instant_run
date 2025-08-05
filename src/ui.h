@@ -12,6 +12,7 @@ namespace ui {
 
 struct Options {
 	bool debug_layout;
+	bool debug_layout_overflow;
 };
 
 enum class SizeConstraint {
@@ -89,6 +90,7 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text);
 
 void add_item(Vec2 size);
 bool is_item_hovered();
+bool is_rect_hovered(const Rect& rect);
 Rect get_item_bounds();
 Vec2 get_item_size();
 Vec2 get_cursor();
@@ -128,8 +130,11 @@ void set_layout_item_spacing(float item_spacing);
 void begin_vertical_layout(const LayoutConfig* config = nullptr);
 void end_vertical_layout();
 
-void begin_horizontal_layout(const LayoutConfig* config = nullptr);
+void begin_horizontal_layout(const LayoutConfig* config = nullptr, const float* prefered_height = nullptr);
 void end_horizontal_layout();
+
+// Returns layout's content bounds + padding
+Rect get_max_layout_bounds();
 
 }
 

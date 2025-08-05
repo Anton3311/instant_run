@@ -203,7 +203,13 @@ uint32_t compute_longest_common_subsequence(
 	size_t grid_height = string.length() + 1;
 	LCSCell* cells = arena_alloc_array<LCSCell>(arena, grid_width * grid_height);
 
-	std::memset(cells, 0, sizeof(LCSCell) * grid_width * grid_height);
+	for (size_t x = 0; x < grid_width; x++) {
+		cells[x] = LCSCell {};
+	}
+
+	for (size_t y = 0; y < grid_height; y++) {
+		cells[y * grid_width] = LCSCell {};
+	}
 
 	highlight_range.start = static_cast<uint32_t>(sequence_ranges.size());
 
@@ -239,12 +245,18 @@ uint32_t compute_longest_common_subsequence(
 
 	// Generate highlight ranges
 	{
+		PROFILE_SCOPE("Generate highlight ranges");
 		struct BacktrackEntry {
 			LCSDirection direction;
 			uint32_t y;
 		};
 
-		std::vector<BacktrackEntry> backtrack;
+		// Preallocate for the worst case
+		size_t backtrack_buffer_size = grid_width * grid_height - 1;
+		BacktrackEntry* backtrack = arena_alloc_array<BacktrackEntry>(arena, backtrack_buffer_size);
+		// NOTE: It is off by 1 in order to avoid an overflow.
+		// 	     It points to the first valid entry staring from the left.
+		size_t backtrack_insert_index = backtrack_buffer_size;
 
 		UVec2 position = UVec2 { (uint32_t)(grid_width - 1), (uint32_t)(grid_height - 1) };
 		while (true) {
@@ -254,7 +266,8 @@ uint32_t compute_longest_common_subsequence(
 				break;
 			}
 
-			backtrack.insert(backtrack.begin(), BacktrackEntry { .direction = cell.direction, .y = position.y - 1 });
+			backtrack[backtrack_insert_index - 1] = BacktrackEntry { .direction = cell.direction, .y = position.y - 1 };
+			backtrack_insert_index -= 1;
 
 			switch (cell.direction) {
 			case LCSDirection::Vertical:
@@ -273,7 +286,7 @@ uint32_t compute_longest_common_subsequence(
 		}
 
 		RangeU32 range{};
-		for (size_t i = 0; i < backtrack.size(); i++) {
+		for (size_t i = backtrack_insert_index; i < backtrack_buffer_size; i++) {
 			if (backtrack[i].direction == LCSDirection::Diagonal) {
 				if (range.count == 0) {
 					range.start = backtrack[i].y;

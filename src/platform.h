@@ -77,6 +77,10 @@ struct Window;
 void initialize_platform();
 void shutdown_platform();
 
+//
+// Windows
+//
+
 Window* create_window(uint32_t width, uint32_t height, std::wstring_view title);
 
 void swap_window_buffers(Window* window);

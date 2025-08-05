@@ -1,5 +1,6 @@
 clang++ ^
 	src\main.cpp ^
+	src\core.cpp ^
 	src\platform.cpp ^
 	src\renderer.cpp ^
 	src\ui.cpp ^

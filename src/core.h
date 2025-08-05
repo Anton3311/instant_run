@@ -199,3 +199,52 @@ struct RangeU32 {
 	uint32_t start;
 	uint32_t count;
 };
+
+//
+// Arena
+//
+
+inline size_t align(size_t value, size_t alignment) {
+	return (value + alignment - 1) / alignment * alignment;
+}
+
+struct Arena {
+	size_t capacity;
+	size_t commited;
+	size_t allocated;
+	uint8_t* base;
+};
+void query_system_memory_spec();
+void* arena_alloc_aligned(Arena& arena, size_t size, size_t alignment);
+
+inline void arena_reset(Arena& arena) {
+	arena.allocated = 0;
+}
+
+template<typename T>
+inline T* arena_alloc(Arena& arena) {
+	return reinterpret_cast<T*>(arena_alloc_aligned(arena, sizeof(T), alignof(T)));
+}
+
+template<typename T>
+inline T* arena_alloc_array(Arena& arena, size_t count) {
+	return reinterpret_cast<T*>(arena_alloc_aligned(arena, sizeof(T) * count, alignof(T)));
+}
+
+void arena_release(Arena& arena);
+
+struct ArenaSavePoint {
+	Arena* arena;
+	size_t allocated_state;
+};
+
+inline ArenaSavePoint arena_begin_temp(Arena& arena) {
+	return ArenaSavePoint { .arena = &arena, .allocated_state = arena.allocated };
+}
+
+inline void arena_end_temp(ArenaSavePoint save_point) {
+	save_point.arena->allocated = save_point.allocated_state;
+}
+
+constexpr size_t kb_to_bytes(size_t kb) { return kb * 1024; }
+constexpr size_t mb_to_bytes(size_t mb) { return kb_to_bytes(mb * 1024); }

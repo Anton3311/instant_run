@@ -136,7 +136,7 @@ inline wchar_t to_lower_case(wchar_t c) {
 	return c;
 }
 
-uint32_t compute_logest_common_substring(
+uint32_t compute_longest_common_substring(
 		const std::wstring_view& string,
 		const std::wstring_view& pattern,
 		std::vector<RangeU32>& sequence_ranges,
@@ -185,20 +185,23 @@ struct LCSCell {
 	LCSDirection direction;
 };
 
-uint32_t compute_logest_common_subsequence(
+uint32_t compute_longest_common_subsequence(
 		const std::wstring_view& string,
 		const std::wstring_view& pattern,
 		std::vector<RangeU32>& sequence_ranges,
-		RangeU32& highlight_range) {
+		RangeU32& highlight_range,
+		Arena& arena) {
 	PROFILE_FUNCTION();
 
 	if (string.length() == 0 || pattern.length() == 0) {
 		return 0;
 	}
 
+	ArenaSavePoint temp_region = arena_begin_temp(arena);
+
 	size_t grid_width = pattern.length() + 1;
 	size_t grid_height = string.length() + 1;
-	LCSCell* cells = new LCSCell[grid_width * grid_height];
+	LCSCell* cells = arena_alloc_array<LCSCell>(arena, grid_width * grid_height);
 
 	std::memset(cells, 0, sizeof(LCSCell) * grid_width * grid_height);
 
@@ -295,7 +298,8 @@ uint32_t compute_logest_common_subsequence(
 	}
 	
 	uint16_t score = cells[(grid_height - 1) * grid_width + (grid_width - 1)].value;
-	delete[] cells;
+
+	arena_end_temp(temp_region);
 
 	return score;
 }
@@ -303,7 +307,8 @@ uint32_t compute_logest_common_subsequence(
 void update_search_result(std::wstring_view search_pattern,
 		const std::vector<Entry>& entries,
 		std::vector<ResultEntry>& result,
-		std::vector<RangeU32>& sequence_ranges) {
+		std::vector<RangeU32>& sequence_ranges,
+		Arena& arena) {
 	PROFILE_FUNCTION();
 
 	result.clear();
@@ -314,11 +319,12 @@ void update_search_result(std::wstring_view search_pattern,
 
 		RangeU32 highlight_range{};
 
-		uint32_t score = compute_logest_common_subsequence(
+		uint32_t score = compute_longest_common_subsequence(
 				entry.name,
 				search_pattern,
 				sequence_ranges,
-				highlight_range);
+				highlight_range,
+				arena);
 
 		result.push_back({ (uint32_t)i, score, highlight_range });
 	}
@@ -525,15 +531,12 @@ void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage
 
 int main()
 {
-#if 0
-	{
-		std::vector<RangeU32> a;
-		RangeU32 b{};
-		compute_logest_common_subsequence(L"Paint", L"Chrome", a, b);
-	}
-#endif
+	query_system_memory_spec();
 
 	initialize_platform();
+
+	Arena arena{};
+	arena.capacity = mb_to_bytes(8);
 
 	Window* window = create_window(800, 500, L"Instant Run");
 
@@ -611,7 +614,7 @@ int main()
 
 	ResultViewState result_view_state{};
 
-	update_search_result({}, entries, result_view_state.matches, result_view_state.highlights);
+	update_search_result({}, entries, result_view_state.matches, result_view_state.highlights, arena);
 
 	while (!window_should_close(window)) {
 		PROFILE_BEGIN_FRAME("Main");
@@ -664,7 +667,7 @@ int main()
 
 			if (ui::text_input(input_state, L"Search ...")) {
 				std::wstring_view search_pattern(text_buffer, input_state.text_length);
-				update_search_result(search_pattern, entries, result_view_state.matches, result_view_state.highlights);
+				update_search_result(search_pattern, entries, result_view_state.matches, result_view_state.highlights, arena);
 
 				result_view_state.selected_index = 0;
 			}
@@ -733,6 +736,8 @@ int main()
 	destroy_window(window);
 
 	shutdown_platform();
+
+	arena_release(arena);
 
 	return 0;
 }

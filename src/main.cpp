@@ -253,6 +253,9 @@ uint32_t compute_longest_common_subsequence(
 			}
 		}
 	}
+	
+	uint16_t similarity_score = cells[(grid_height - 1) * grid_width + (grid_width - 1)].value;
+	uint16_t longest_substr_score = 0;
 
 	// Generate highlight ranges
 	{
@@ -308,6 +311,7 @@ uint32_t compute_longest_common_subsequence(
 			} else {
 				if (range.count != 0) {
 					sequence_ranges.push_back(range);
+					longest_substr_score = max(longest_substr_score, (uint16_t)range.count);
 					highlight_range.count += 1;
 
 					range.count = 0;
@@ -317,15 +321,14 @@ uint32_t compute_longest_common_subsequence(
 
 		if (range.count > 0) {
 			sequence_ranges.push_back(range);
+			longest_substr_score = max(longest_substr_score, (uint16_t)range.count);
 			highlight_range.count += 1;
 		}
 	}
-	
-	uint16_t score = cells[(grid_height - 1) * grid_width + (grid_width - 1)].value;
 
 	arena_end_temp(temp_region);
 
-	return score;
+	return (uint32_t)similarity_score << 16 | (uint32_t)longest_substr_score;
 }
 
 void update_search_result(std::wstring_view search_pattern,

@@ -675,7 +675,7 @@ RunFileResult run_file(const std::filesystem::path& path, bool run_as_admin) {
 
 	// NOTE: open - is can be used to lauch an exe
 	//       runas - is for lauching as admin
-	const wchar_t* operation = run_as_admin ? L"runas" : L"open";
+	const wchar_t* operation = run_as_admin ? L"runas" : nullptr; // nullptr means a default operation
 
 	INT_PTR result = (INT_PTR)ShellExecute(nullptr, // window is null
 			operation,

@@ -441,20 +441,38 @@ static std::filesystem::path get_known_system_path(KNOWNFOLDERID id) {
 
 	std::filesystem::path result;
 
-	if (SHGetKnownFolderPath(id, 0, nullptr, &path) == S_OK) {
-		result = path;
+	HANDLE token = nullptr;
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_IMPERSONATE, &token)) {
+		printf("Failed to open process token");
 	}
+
+	if (SHGetKnownFolderPath(id, 0, token, &path) == S_OK) {
+		result = path;
+	} else {
+		printf("SHGetKnownFolderPath: failed");
+	}
+
+	CloseHandle(token);
 
 	CoTaskMemFree(path);
 	return result;
 }
 
-std::vector<std::filesystem::path> get_start_menu_folder_path() {
+std::vector<std::filesystem::path> get_user_folders(UserFolderKind kind) {
 	PROFILE_FUNCTION();
 	std::vector<std::filesystem::path> results;
 
- 	results.push_back(get_known_system_path(FOLDERID_CommonStartMenu));
- 	results.push_back(get_known_system_path(FOLDERID_Programs));
+	if (HAS_FLAG(kind, UserFolderKind::StartMenu)) {
+		results.push_back(get_known_system_path(FOLDERID_CommonStartMenu));
+	}
+
+	if (HAS_FLAG(kind, UserFolderKind::Programs)) {
+		results.push_back(get_known_system_path(FOLDERID_Programs));
+	}
+
+	if (HAS_FLAG(kind, UserFolderKind::Desktop)) {
+		results.push_back(get_known_system_path(FOLDERID_Desktop));
+	}
 
 	return results;
 }

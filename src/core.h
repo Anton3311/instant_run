@@ -18,6 +18,20 @@
 #define PROFILE_END_FRAME(name)
 #endif
 
+#define HAS_FLAG(flag_set, flag) (((flag_set) & (flag)) == (flag))
+#define HAS_ANY_FLAG(flag_set, flag) (((flag_set) & (flag)) != 0)
+
+#define ENUM_TYPE(enum_name) std::underlying_type_t<enum_name>
+#define IMPL_ENUM_FLAGS(enum_name) \
+	constexpr enum_name operator&(enum_name a, enum_name b) \
+		{ return (enum_name)((ENUM_TYPE(enum_name))a & (ENUM_TYPE(enum_name))b); } \
+	constexpr enum_name operator|(enum_name a, enum_name b) \
+		{ return (enum_name)((ENUM_TYPE(enum_name))a | (ENUM_TYPE(enum_name))b); } \
+	constexpr bool operator==(enum_name a, int b) { return (int)a == b; } \
+	constexpr bool operator!=(enum_name a, int b) { return (int)a != b; } \
+	constexpr enum_name operator~(enum_name a) \
+		{ return (enum_name)(~(ENUM_TYPE(enum_name))a); }
+
 struct Color {
 	uint8_t r;
 	uint8_t g;

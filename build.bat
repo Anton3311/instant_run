@@ -29,4 +29,4 @@ clang++ ^
 	%BIN_INT_DIR%\glad.o ^
 	%BIN_INT_DIR%\stb_truetype.o ^
 	%BIN_INT_DIR%\stb_image.o ^
-	-std=c++20 -m64 -lgdi32 -lopengl32 -luser32 -ldwmapi -lshell32 -lole32 -g -DUNICODE -D_UNICODE %CMD_ARGS%
+	-std=c++20 -m64 -lgdi32 -lopengl32 -luser32 -ldwmapi -lshell32 -lole32 -lAdvapi32.lib -g -DUNICODE -D_UNICODE %CMD_ARGS%

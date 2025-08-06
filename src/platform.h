@@ -100,7 +100,15 @@ void destroy_window(Window* window);
 // File system
 //
 
-std::vector<std::filesystem::path> get_start_menu_folder_path();
+enum class UserFolderKind {
+	Desktop = 1,
+	StartMenu = 2,
+	Programs = 4,
+};
+
+IMPL_ENUM_FLAGS(UserFolderKind);
+
+std::vector<std::filesystem::path> get_user_folders(UserFolderKind folders);
 
 struct Bitmap {
 	uint32_t width;

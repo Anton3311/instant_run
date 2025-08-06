@@ -655,13 +655,13 @@ int main()
 
 	std::vector<Entry> entries;
 
-	try {
-		std::vector<std::filesystem::path> known_folders = get_start_menu_folder_path();
-		for (const auto& known_folder : known_folders) {
+	std::vector<std::filesystem::path> known_folders = get_user_folders(
+			UserFolderKind::Desktop | UserFolderKind::StartMenu | UserFolderKind::Programs);
+	for (const auto& known_folder : known_folders) {
+		try {
 			walk_directory(known_folder, entries);
+		} catch (std::exception e) {
 		}
-	} catch (std::exception e) {
-		std::cout << e.what() << '\n';
 	}
 
 	load_application_icons(entries, app_icon_storage, arena);

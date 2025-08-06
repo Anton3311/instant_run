@@ -369,6 +369,47 @@ float compute_result_entry_height() {
 	return ui::get_default_widget_height();
 }
 
+void draw_result_entry_text(const Entry& entry,
+		const ResultEntry& match,
+		const ResultViewState& state,
+		Color highlight_color,
+		float available_width) {
+
+	ui::LayoutConfig layout_config{};
+	ui::begin_fixed_horizontal_layout(Vec2 { available_width, ui::get_default_font_height() }, &layout_config);
+
+	uint32_t cursor = 0;
+	for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
+		RangeU32 highlight_range = state.highlights[i];
+
+		if (cursor != highlight_range.start) {
+			std::wstring_view t = std::wstring_view(entry.name)
+				.substr(cursor, highlight_range.start - cursor);
+
+			ui::text(t);
+
+			float text_width = ui::get_item_bounds().width();
+			available_width -= text_width;
+		}
+
+		std::wstring_view highlighted_text = std::wstring_view(entry.name)
+			.substr(highlight_range.start, highlight_range.count);
+
+		ui::colored_text(highlighted_text, highlight_color);
+
+		cursor = highlight_range.start + highlight_range.count;
+	}
+
+	if (cursor < entry.name.length()) {
+		std::wstring_view t = std::wstring_view(entry.name)
+			.substr(cursor);
+
+		ui::text(t);
+	}
+
+	ui::end_horizontal_layout();
+}
+
 EntryAction draw_result_entry(const ResultEntry& match,
 		const Entry& entry,
 		const ResultViewState& state,
@@ -417,45 +458,16 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		}
 	}
 
-	{
-		ui::LayoutConfig layout_config{};
-		ui::begin_horizontal_layout(&layout_config);
-		uint32_t cursor = 0;
-		for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
-			RangeU32 highlight_range = state.highlights[i];
-
-			if (cursor != highlight_range.start) {
-				std::wstring_view t = std::wstring_view(entry.name)
-					.substr(cursor, highlight_range.start - cursor);
-
-				ui::text(t);
-			}
-
-			std::wstring_view highlighted_text = std::wstring_view(entry.name)
-				.substr(highlight_range.start, highlight_range.count);
-
-			ui::colored_text(highlighted_text, highlight_color);
-
-			cursor = highlight_range.start + highlight_range.count;
-		}
-
-		if (cursor < entry.name.length()) {
-			std::wstring_view t = std::wstring_view(entry.name)
-				.substr(cursor);
-
-			ui::text(t);
-		}
-
-		ui::end_horizontal_layout();
-	}
+	float available_width = ui::get_available_layout_space();
+	Vec2 text_cursor_position = ui::get_cursor();
 
 	if (hovered || is_selected)
 	{
 		float icon_size = font_get_height(*theme.default_font);
-		float available_width = ui::get_available_layout_space();
 
 		uint32_t icon_button_count = 3;
-		float icon_row_width = (float)icon_button_count * icon_size + (float)(icon_button_count - 1) * theme.default_layout_config.item_spacing;
+		float icon_row_width = (float)icon_button_count * icon_size
+			+ (float)(icon_button_count - 1) * theme.default_layout_config.item_spacing;
 
 		Vec2 cursor = ui::get_cursor();
 		cursor.x += available_width - icon_row_width;
@@ -478,7 +490,13 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		if (ui::icon_button(icons.texture, icons.copy, &close_icon_style, &icon_size)) {
 			action = EntryAction::CopyPath;
 		}
+
+		// Reduce the available_width of the text row, so it doesn't overflow or go under the iocn buttons
+		available_width -= icon_row_width + theme.default_layout_config.item_spacing;
 	}
+
+	ui::set_cursor(text_cursor_position);
+	draw_result_entry_text(entry, match, state, highlight_color, available_width);
 
 	ui::end_horizontal_layout();
 

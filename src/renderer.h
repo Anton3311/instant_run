@@ -59,4 +59,4 @@ void draw_rect(const Rect& rect, Color color);
 void draw_rect(const Rect& rect, Color color, const Texture& texture, Rect uv_rect);
 void draw_rounded_rect(const Rect& rect, Color color, float corner_radius);
 void draw_rect_lines(const Rect& rect, Color color);
-void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color color);
+void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color color, float max_width = FLT_MAX);

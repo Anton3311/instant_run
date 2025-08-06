@@ -665,7 +665,7 @@ void draw_rect_lines(const Rect& rect, Color color) {
 	draw_line(rect.min, bottom_left, color);
 }
 
-void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color color) {
+void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color color, float max_width) {
 	PROFILE_FUNCTION();
 
 	if (color.a == 0) {
@@ -695,6 +695,11 @@ void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color co
 				&char_position.y,
 				&quad,
 				1);
+
+		float text_width = char_position.x - position.x;
+		if (text_width > max_width) {
+			break;
+		}
 
 		int32_t kerning_advance = 0;
 		if (i + 1 < text.size()) {

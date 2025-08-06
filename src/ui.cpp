@@ -4,6 +4,7 @@
 
 #include <cstring>
 #include <vector>
+#include <limits.h>
 
 // TODO: rename `content_bounds` to `max_content_bounds`
 
@@ -290,7 +291,11 @@ Options& get_options() {
 	return s_ui_state.options;
 }
 
-Vec2 compute_text_size(const Font& font, std::wstring_view text) {
+float get_default_font_height() {
+	return font_get_height(*s_ui_state.theme.default_font);
+}
+
+Vec2 compute_text_size(const Font& font, std::wstring_view text, float max_width) {
 	PROFILE_FUNCTION();
 
 	Vec2 char_position{};
@@ -305,6 +310,8 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text) {
 			continue;
 		}
 
+		float previous_char_x = char_position.x;
+
 		stbtt_aligned_quad quad{};
 		stbtt_GetBakedQuad(font.glyphs,
 				font.atlas.width,
@@ -314,6 +321,12 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text) {
 				&char_position.y,
 				&quad,
 				1);
+
+		if (char_position.x > max_width) {
+			// Revert the last char changes
+			char_position.x = previous_char_x;
+			break;
+		}
 
 		int32_t kerning_advance = 0;
 		if (i + 1 < text.size()) {
@@ -547,12 +560,14 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 
 void colored_text(std::wstring_view text, Color color) {
 	PROFILE_FUNCTION();
-	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text);
+
+	float available_space = get_available_layout_space();
+	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text, available_space);
 
 	add_item(text_size);
 	Vec2 text_position = s_ui_state.last_item.bounds.min;
 
-	draw_text(text, text_position, *s_ui_state.theme.default_font, color);
+	draw_text(text, text_position, *s_ui_state.theme.default_font, color, available_space);
 }
 
 void text(std::wstring_view text) {
@@ -653,6 +668,33 @@ void begin_horizontal_layout(const LayoutConfig* config, const float* prefered_h
 		// NOTE: padding is already included once in the bounds.min
 		bounds.max.y = bounds.min.y + *prefered_height + config->padding.y;
 	}
+
+	s_ui_state.layout_stack.push_back(s_ui_state.layout);
+
+	s_ui_state.layout = LayoutState {
+		.kind = LayoutKind::Horizontal,
+		.bounds = bounds,
+		.content_bounds = content_bounds,
+		.cursor = content_bounds.min,
+		.config = *config
+	};
+}
+
+void begin_fixed_horizontal_layout(Vec2 prefered_size, const LayoutConfig* config) {
+	if (config == nullptr) {
+		config = &s_ui_state.theme.default_layout_config;
+	}
+
+	Vec2 cursor = s_ui_state.layout.cursor;
+
+	Rect content_bounds{};
+	content_bounds.min = cursor + config->padding;
+	content_bounds.max = content_bounds.min + prefered_size - config->padding;
+	
+	// NOTE: padding is already included once in the bounds.min
+	Rect bounds{};
+	bounds.min = cursor;
+	bounds.max = bounds.min + prefered_size + config->padding;
 
 	s_ui_state.layout_stack.push_back(s_ui_state.layout);
 

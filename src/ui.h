@@ -1,10 +1,11 @@
 #pragma once
 
-#include <string_view>
-
 #include "core.h"
 #include "renderer.h"
 #include "platform.h"
+
+#include <string_view>
+#include <limits.h>
 
 struct Window;
 
@@ -90,7 +91,9 @@ const Theme& get_theme();
 void set_theme(const Theme& theme);
 Options& get_options();
 
-Vec2 compute_text_size(const Font& font, std::wstring_view text);
+float get_default_font_height();
+
+Vec2 compute_text_size(const Font& font, std::wstring_view text, float max_width = FLT_MAX);
 
 //
 // UI Item
@@ -142,6 +145,7 @@ void begin_vertical_layout(const LayoutConfig* config = nullptr);
 void end_vertical_layout();
 
 void begin_horizontal_layout(const LayoutConfig* config = nullptr, const float* prefered_height = nullptr);
+void begin_fixed_horizontal_layout(Vec2 prefered_size, const LayoutConfig* config);
 void end_horizontal_layout();
 
 // Returns layout's content bounds + padding

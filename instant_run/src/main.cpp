@@ -2,10 +2,20 @@
 #include <string>
 #include <vector>
 #include <iostream>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 #include "platform.h"
 #include "renderer.h"
 #include "ui.h"
+
+#include "hook_config.h"
+
+#define NOMINMAX
+#include <windows.h>
+
+#undef TRANSPARENT
 
 static constexpr UVec2 INVALID_ICON_POSITION = UVec2 { UINT32_MAX, UINT32_MAX };
 
@@ -602,8 +612,102 @@ void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage
 	}
 }
 
+struct AppState {
+	std::thread hook_thread;
+	HINSTANCE hook_module;
+	HOOKPROC hook_proc;
+	HHOOK hook_handle;
+
+	DWORD hook_thread_id;
+
+	std::mutex hook_enabled_mutex;
+	std::condition_variable hook_enabled_var;
+};
+
+static AppState s_app;
+
+void enable_app() {
+	std::wcout << "Enabled\n";
+}
+
+void keyboard_init_hook_worker() {
+	s_app.hook_thread_id = GetThreadId(GetCurrentThread());
+
+	s_app.hook_handle = SetWindowsHookEx(WH_KEYBOARD_LL, s_app.hook_proc, s_app.hook_module, 0);
+	if (!s_app.hook_handle) {
+		exit(EXIT_FAILURE);
+	}
+
+	s_app.hook_enabled_var.notify_all();
+
+	MSG msg{};
+	while (GetMessageA(&msg, 0, 0, 0)) {
+		if (msg.message == WM_QUIT) {
+			break;
+		}
+	}
+
+	s_app.hook_enabled_var.notify_all();
+}
+
+static const char* KEYBOARD_HOOK_FUNCTION_NAME = "keyboard_hook";
+static const char* KEYBOARD_HOOK_INIT_FUNCTION_NAME = "init_keyboard_hook";
+
+bool init_keyboard_hook() {
+	PROFILE_FUNCTION();
+	s_app.hook_module = LoadLibraryA("instant_run.dll");
+	if (!s_app.hook_module) {
+		return false;
+	}
+
+	InitKeyboardHookFunction init_hook = (InitKeyboardHookFunction)GetProcAddress(
+			s_app.hook_module,
+			KEYBOARD_HOOK_INIT_FUNCTION_NAME);
+
+	HookConfig config{};
+	config.app_enable_fn = enable_app;
+	init_hook(config);
+
+	s_app.hook_proc = (HOOKPROC)GetProcAddress(s_app.hook_module, KEYBOARD_HOOK_FUNCTION_NAME);
+	s_app.hook_thread = std::thread(keyboard_init_hook_worker);
+
+	{
+		std::unique_lock<std::mutex> lock(s_app.hook_enabled_mutex);
+		s_app.hook_enabled_var.wait(lock);
+	}
+
+	return true;
+}
+
+void shutdown_keyboard_hook(Arena& arena) {
+	PROFILE_FUNCTION();
+
+ 	if (!UnhookWindowsHookEx(s_app.hook_handle)) {
+		std::wcout << "Failed to unhook keyboard hook: ";
+		platform_log_error_message();
+		std::wcout << '\n';
+	}
+
+	if (!PostThreadMessageA(s_app.hook_thread_id, WM_QUIT, 0, 0)) {
+		std::wcout << "Failed to post thread quit message: ";
+		platform_log_error_message();
+		std::wcout << '\n';
+	}
+
+	{
+		std::unique_lock<std::mutex> lock(s_app.hook_enabled_mutex);
+		s_app.hook_enabled_var.wait(lock);
+	}
+
+	s_app.hook_thread.join();
+
+	FreeLibrary(s_app.hook_module);
+}
+
 int main()
 {
+	init_keyboard_hook();
+
 	query_system_memory_spec();
 
 	initialize_platform();
@@ -823,6 +927,8 @@ int main()
 
 		PROFILE_END_FRAME("Main");
 	}
+
+	shutdown_keyboard_hook(arena);
 
 	delete_texture(app_icon_storage.texture);
 	delete_texture(icons.texture);

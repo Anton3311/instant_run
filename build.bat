@@ -2,8 +2,9 @@ set CMD_ARGS=-m64
 set PLATFORM=win
 set ARCH=x86_64
 set APP_NAME=instant_run
+set SRC=instant_run\src
 
-set FILES=src\main.cpp src\core.cpp src\platform.cpp src\renderer.cpp src\ui.cpp
+set FILES=%SRC%\main.cpp %SRC%\core.cpp %SRC%\platform.cpp %SRC%\renderer.cpp %SRC%\ui.cpp
 
 if [%1] == [release] (
 	set CMD_ARGS=%CMD_ARGS% -DTRACY_ENABLE -DENABLE_PROFILING -O3
@@ -25,6 +26,7 @@ clang++ ^
 	-Ivendor\stb_truetype ^
 	-Ivendor\stb_image ^
 	-Ivendor\Tracy ^
+	-Iinstant_run_hook\src ^
 	-o %BIN_DIR%\%APP_NAME%.exe ^
 	%BIN_INT_DIR%\glad.o ^
 	%BIN_INT_DIR%\stb_truetype.o ^

@@ -61,6 +61,26 @@ void shutdown_platform() {
 	CoUninitialize();
 }
 
+void platform_log_error_message() {
+	PROFILE_FUNCTION();
+
+	DWORD error_code = GetLastError();
+
+	wchar_t* message = nullptr;
+
+	size_t message_length = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER
+			| FORMAT_MESSAGE_FROM_SYSTEM
+			| FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL,
+			error_code,
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			(LPWSTR)&message,
+			0,
+			NULL);
+
+	std::wcout << message;
+}
+
 //
 // OpenGL
 //
@@ -308,6 +328,11 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 		}
 
 		return 0;
+	case WM_SYSCOMMAND:
+		if ((wParam & 0xFFF0) == SC_KEYMENU) {
+			return 0;
+		}
+		break;
 	case WM_CLOSE:
 		window->should_close = true;
 		PostQuitMessage(0);

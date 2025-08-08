@@ -77,6 +77,8 @@ struct Window;
 void initialize_platform();
 void shutdown_platform();
 
+void platform_log_error_message();
+
 //
 // Windows
 //

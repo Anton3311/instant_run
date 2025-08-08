@@ -4,4 +4,6 @@
 *.rdi
 *.o
 *.tracy
+bin
+bin_int
 raddbg_proj

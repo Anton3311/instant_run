@@ -10,12 +10,16 @@
 
 #define PROFILE_BEGIN_FRAME(name) FrameMarkStart(name)
 #define PROFILE_END_FRAME(name) FrameMarkEnd(name)
+
+#define PROFILE_NAME_THREAD(name) tracy::SetThreadName(name)
 #else
 #define PROFILE_SCOPE(name)
 #define PROFILE_FUNCTION()
 
 #define PROFILE_BEGIN_FRAME(name)
 #define PROFILE_END_FRAME(name)
+
+#define PROFILE_NAME_THREAD(name)
 #endif
 
 #define HAS_FLAG(flag_set, flag) (((flag_set) & (flag)) == (flag))

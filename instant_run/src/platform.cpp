@@ -1,5 +1,7 @@
 #include "platform.h"
 
+#include "hook_config.h"
+
 #include <string>
 #include <iostream>
 
@@ -9,6 +11,11 @@
 #include <dwmapi.h>
 #include <objbase.h>
 #include <glad/glad.h>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+
+#define NOMINMAX
 
 struct ShortcutResolverState {
 	IPersistFile* persistent_file_interface; 
@@ -79,6 +86,131 @@ void platform_log_error_message() {
 			NULL);
 
 	std::wcout << message;
+}
+
+ModuleHandle platform_load_library(const char* path) {
+	PROFILE_FUNCTION();
+	return LoadLibraryA(path);
+}
+
+void platform_unload_library(ModuleHandle module) {
+	PROFILE_FUNCTION();
+	FreeLibrary((HINSTANCE)module);
+}
+
+void* platform_get_function_address(ModuleHandle module, const char* function_name) {
+	PROFILE_FUNCTION();
+	
+	return (void*)GetProcAddress((HINSTANCE)module, function_name);
+}
+
+//
+// Keybaord Hook
+//
+
+struct KeyboardHook {
+	std::thread hook_thread;
+	HINSTANCE hook_module;
+	HOOKPROC hook_proc;
+	HHOOK hook_handle;
+
+	DWORD hook_thread_id;
+
+	std::mutex hook_mutex;
+	std::condition_variable hook_var;
+};
+
+static const char* KEYBOARD_HOOK_FUNCTION_NAME = "keyboard_hook";
+static const char* KEYBOARD_HOOK_INIT_FUNCTION_NAME = "init_keyboard_hook";
+
+void keyboard_hook_thread_worker(KeyboardHookHandle hook) {
+	PROFILE_NAME_THREAD("low_level_keyboard_hook_thread_worker");
+
+	{
+		PROFILE_SCOPE("initialize_keyboard_hook");
+		hook->hook_thread_id = GetThreadId(GetCurrentThread());
+		hook->hook_handle = SetWindowsHookEx(WH_KEYBOARD_LL, hook->hook_proc, hook->hook_module, 0);
+
+		if (!hook->hook_handle) {
+			exit(EXIT_FAILURE);
+		}
+
+		hook->hook_var.notify_all();
+	}
+
+	MSG msg{};
+	while (GetMessageA(&msg, 0, 0, 0)) {
+		if (msg.message == WM_QUIT) {
+			break;
+		}
+	}
+
+	{
+		PROFILE_SCOPE("notify_about_hook_deinit");
+		hook->hook_var.notify_all();
+	}
+}
+
+KeyboardHookHandle keyboard_hook_init(Arena& allocator, const HookConfig& hook_config) {
+	PROFILE_FUNCTION();
+
+	HINSTANCE hook_module = LoadLibraryA("instant_run.dll");
+	if (!hook_module) {
+		return nullptr;
+	}
+
+	InitKeyboardHookFunction init_hook = (InitKeyboardHookFunction)GetProcAddress(
+			hook_module,
+			KEYBOARD_HOOK_INIT_FUNCTION_NAME);
+
+	HOOKPROC hook_proc = (HOOKPROC)GetProcAddress(hook_module, KEYBOARD_HOOK_FUNCTION_NAME);
+	if (!hook_proc) {
+		return nullptr;
+	}
+
+	init_hook(hook_config);
+
+	KeyboardHook* hook = arena_alloc<KeyboardHook>(allocator);
+	new(hook) KeyboardHook();
+
+	hook->hook_module = hook_module;
+	hook->hook_proc = hook_proc;
+	hook->hook_thread = std::thread(keyboard_hook_thread_worker, hook);
+
+	{
+		PROFILE_SCOPE("wait_for_hook_worker_enable");
+		std::unique_lock<std::mutex> lock(hook->hook_mutex);
+		hook->hook_var.wait(lock);
+	}
+
+	return hook;
+}
+
+void keyboard_hook_shutdown(KeyboardHookHandle hook) {
+	PROFILE_FUNCTION();
+
+ 	if (!UnhookWindowsHookEx(hook->hook_handle)) {
+		std::wcout << "Failed to unhook keyboard hook: ";
+		platform_log_error_message();
+		std::wcout << '\n';
+	}
+
+	if (!PostThreadMessageA(hook->hook_thread_id, WM_QUIT, 0, 0)) {
+		std::wcout << "Failed to post thread quit message: ";
+		platform_log_error_message();
+		std::wcout << '\n';
+	}
+
+	{
+		std::unique_lock<std::mutex> lock(hook->hook_mutex);
+		hook->hook_var.wait(lock);
+	}
+
+	hook->hook_thread.join();
+
+	FreeLibrary(hook->hook_module);
+
+	hook->~KeyboardHook();
 }
 
 //

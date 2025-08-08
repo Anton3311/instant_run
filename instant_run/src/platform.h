@@ -79,6 +79,25 @@ void shutdown_platform();
 
 void platform_log_error_message();
 
+typedef void* ModuleHandle;
+
+ModuleHandle platform_load_library(const char* path);
+void platform_unload_library(ModuleHandle module);
+
+void* platform_get_function_address(ModuleHandle module, const char* function_name);
+
+//
+// Keybaord Hook
+//
+
+struct KeyboardHook;
+struct HookConfig;
+using KeyboardHookHandle = KeyboardHook*;
+
+KeyboardHookHandle keyboard_hook_init(Arena& allocator, const HookConfig& hook_config);
+void keyboard_hook_shutdown(KeyboardHookHandle hook);
+
+
 //
 // Windows
 //

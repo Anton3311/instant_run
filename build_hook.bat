@@ -7,7 +7,7 @@ set SRC=instant_run_hook\src
 set FILES=%SRC%\hook_main.cpp
 
 if [%1] == [release] (
-	set CMD_ARGS=%CMD_ARGS% -DTRACY_ENABLE -DENABLE_PROFILING -O3
+	set CMD_ARGS=%CMD_ARGS% -O3
 	set BIN_DIR=bin\release_%PLATFORM%_%ARCH%
 	set BIN_INT_DIR=bin_int\release_%PLATFORM%_%ARCH%
 	

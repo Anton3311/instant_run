@@ -397,8 +397,23 @@ void window_poll_events(Window* window) {
 	window->event_count = 0;
 
 	MSG message{};
-	while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
-	{
+	while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
+		TranslateMessage(&message);
+		DispatchMessageW(&message);
+	}
+}
+
+void window_wait_for_events(Window* window) {
+	PROFILE_FUNCTION();
+	window->event_count = 0;
+
+	MSG message{};
+	if (GetMessageA(&message, nullptr, 0, 0)) {
+		TranslateMessage(&message);
+		DispatchMessageW(&message);
+	}
+
+	while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE)) {
 		TranslateMessage(&message);
 		DispatchMessageW(&message);
 	}

@@ -74,6 +74,7 @@ struct App {
 	Font font;
 	Arena arena;
 	Window* window;
+	bool wait_for_window_events;
 	Icons icons;
 	ApplicationIconsStorage app_icon_storage;
 	ui::TextInputState search_input_state;
@@ -743,6 +744,7 @@ void initialize_app() {
 	options.debug_layout_overflow = true;
 
 	s_app.state = AppState::Sleeping;
+	s_app.wait_for_window_events = false;
 }
 
 void initialize_search_entries() {
@@ -909,6 +911,8 @@ void run_app_frame() {
 	end_frame();
 
 	window_swap_buffers(s_app.window);
+
+	s_app.wait_for_window_events = true;
 }
 
 int main()
@@ -943,11 +947,16 @@ int main()
 	}
 
 	while (!window_should_close(s_app.window)) {
-
 		switch (s_app.state) {
 		case AppState::Running:
 			PROFILE_BEGIN_FRAME("Main");
-			window_poll_events(s_app.window);
+
+			if (s_app.wait_for_window_events) {
+				window_wait_for_events(s_app.window);
+			} else {
+				window_poll_events(s_app.window);
+			}
+
 			run_app_frame();
 			PROFILE_END_FRAME("Main");
 			break;
@@ -960,6 +969,8 @@ int main()
 			break;
 		}
 	}
+
+	log_info("terminated");
 
 	shutdown_keyboard_hook();
 

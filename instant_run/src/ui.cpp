@@ -232,7 +232,7 @@ void begin_frame() {
 
 	s_ui_state.has_typed_char = false;
 
-	Span<const WindowEvent> events = get_window_events(s_ui_state.window);
+	Span<const WindowEvent> events = window_get_events(s_ui_state.window);
 	for (size_t i = 0; i < events.count; i++) {
 		switch (events[i].kind) {
 		case WindowEventKind::MouseMoved: {
@@ -258,7 +258,7 @@ void begin_frame() {
 		}
 	}
 
-	UVec2 window_size = get_window_framebuffer_size(s_ui_state.window);
+	UVec2 window_size = window_get_framebuffer_size(s_ui_state.window);
 	float window_width = static_cast<float>(window_size.x);
 	float window_height = static_cast<float>(window_size.y);
 
@@ -433,7 +433,7 @@ static bool text_input_behaviour(TextInputState& input_state) {
 	PROFILE_FUNCTION();
 
 	bool changed = false;
-	Span<const WindowEvent> events = get_window_events(s_ui_state.window);
+	Span<const WindowEvent> events = window_get_events(s_ui_state.window);
 	for (size_t i = 0; i < events.count; i++) {
 		switch (events[i].kind) {
 		case WindowEventKind::Key: {

@@ -264,7 +264,7 @@ bool create_opengl_context(Window* window);
 bool init_opengl(Window* window);
 bool translate_key_code(WPARAM virtual_key_code, KeyCode& output);
 
-Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) {
+Window* window_create(uint32_t width, uint32_t height, std::wstring_view title) {
 	PROFILE_FUNCTION();
 	Window* window = new Window();
 	window->title = title;
@@ -299,7 +299,7 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 	window->handle = CreateWindowExW(0,
 		WINDOW_CLASS_NAME,
 		window->title.c_str(),
-		WS_OVERLAPPEDWINDOW,
+		WS_POPUP | WS_MINIMIZE,
 		window_x,
 		window_y,
 		static_cast<int>(window->width),
@@ -309,23 +309,35 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 		GetModuleHandleW(nullptr),
 		nullptr);
 
-	if (window->handle == nullptr)
-	{
+	if (window->handle == nullptr) {
 		return nullptr;
 	}
 
-	LONG_PTR style = GetWindowLongPtr(window->handle, GWL_STYLE);
-	style |= WS_THICKFRAME;
-	style &= ~WS_CAPTION;
-	SetWindowLongPtr(window->handle, GWL_STYLE, style);
+	ShowWindow(window->handle, SW_HIDE);
+
+	{
+		LONG_PTR style = GetWindowLongPtr(window->handle, GWL_STYLE);
+		style |= WS_THICKFRAME;
+		style &= ~WS_CAPTION;
+		SetWindowLongPtr(window->handle, GWL_STYLE, style);
+	}
+
+#if 0
+	{
+		LONG_PTR style = GetWindowLongPtr(window->handle, GWL_EXSTYLE);
+		style |= WS_EX_TOOLWINDOW | WS_EX_APPWINDOW;
+		// style &= ~WS_EX_APPWINDOW;
+		SetWindowLongPtr(window->handle, GWL_EXSTYLE, style);
+	}
+#endif
 
 	MARGINS margins{ 1, 1, 1, 1 };
 	DwmExtendFrameIntoClientArea(window->handle, &margins);
 
 	SetWindowPos(window->handle, NULL, 0, 0, width, height, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCOPYBITS);
-	ShowWindow(window->handle, SW_SHOW);
 
 	SetWindowLongPtrW(window->handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
+	ShowWindow(window->handle, SW_SHOW);
 
 	create_opengl_context(window);
 	init_opengl(window);
@@ -333,7 +345,15 @@ Window* create_window(uint32_t width, uint32_t height, std::wstring_view title) 
 	return window;
 }
 
-void swap_window_buffers(Window* window) {
+void window_show(Window* window) {
+	ShowWindow(window->handle, SW_SHOW);
+}
+
+void window_hide(Window* window) {
+	ShowWindow(window->handle, SW_MINIMIZE);
+}
+
+void window_swap_buffers(Window* window) {
 	PROFILE_FUNCTION();
 	SwapBuffers(GetDC(window->handle));
 }
@@ -342,7 +362,7 @@ bool window_should_close(const Window* window) {
 	return window->should_close;
 }
 
-void poll_window_events(Window* window) {
+void window_poll_events(Window* window) {
 	PROFILE_FUNCTION();
 	window->event_count = 0;
 
@@ -354,11 +374,11 @@ void poll_window_events(Window* window) {
 	}
 }
 
-Span<const WindowEvent> get_window_events(const Window* window) {
+Span<const WindowEvent> window_get_events(const Window* window) {
 	return Span(window->events, window->event_count);
 }
 
-UVec2 get_window_framebuffer_size(const Window* window) {
+UVec2 window_get_framebuffer_size(const Window* window) {
 	RECT rect;
 	GetWindowRect(window->handle, &rect);
 	int width = rect.right - rect.left;
@@ -367,11 +387,11 @@ UVec2 get_window_framebuffer_size(const Window* window) {
 	return UVec2 { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 }
 
-void close_window(Window& window) {
+void window_close(Window& window) {
 	window.should_close = true;
 }
 
-void destroy_window(Window* window) {
+void window_destroy(Window* window) {
 	// TODO: Delete all the resources
 	delete window;
 }

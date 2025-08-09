@@ -1,13 +1,14 @@
-#include <filesystem>
-#include <string>
-#include <vector>
-#include <iostream>
-
 #include "platform.h"
 #include "renderer.h"
 #include "ui.h"
 
 #include "hook_config.h"
+
+#include <filesystem>
+#include <string>
+#include <vector>
+#include <iostream>
+#include <mutex>
 
 #undef TRANSPARENT
 
@@ -606,15 +607,33 @@ void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage
 	}
 }
 
-struct AppState {
+enum class AppState {
+	Running,
+	Sleeping,
+};
+
+struct App {
+	AppState state;
+	std::mutex enable_mutex;
+	std::condition_variable enable_var;
+
+	// Keyboard hook
 	KeyboardHookHandle keyboard_hook;
 };
 
-static AppState s_app;
+static App s_app;
 
 void enable_app() {
 	PROFILE_FUNCTION();
-	std::wcout << "Enabled\n";
+
+	std::cout << "enable\n";
+
+	s_app.enable_var.notify_all();
+}
+
+void enter_sleep_mode() {
+	std::unique_lock lock(s_app.enable_mutex);
+	s_app.enable_var.wait(lock);
 }
 
 bool init_keyboard_hook(Arena& allocator) {
@@ -641,7 +660,7 @@ int main()
 
 	initialize_platform();
 
-	Window* window = create_window(800, 500, L"Instant Run");
+	Window* window = window_create(800, 500, L"Instant Run");
 
 	initialize_renderer(window);
 
@@ -724,11 +743,11 @@ int main()
 	while (!window_should_close(window)) {
 		PROFILE_BEGIN_FRAME("Main");
 
-		poll_window_events(window);
+		window_poll_events(window);
 
 		bool enter_pressed = false;
 
-		Span<const WindowEvent> events = get_window_events(window);
+		Span<const WindowEvent> events = window_get_events(window);
 		for (size_t i = 0; i < events.count; i++) {
 			switch (events[i].kind) {
 			case WindowEventKind::Key: {
@@ -736,7 +755,7 @@ int main()
 				if (key_event.action == InputAction::Pressed) {
 					switch (key_event.code) {
 					case KeyCode::Escape:
-						close_window(*window);
+						window_hide(window);
 						break;
 					case KeyCode::Enter:
 						enter_pressed = true;
@@ -849,7 +868,7 @@ int main()
 		ui::end_frame();
 		end_frame();
 
-		swap_window_buffers(window);
+		window_swap_buffers(window);
 
 		PROFILE_END_FRAME("Main");
 	}
@@ -862,7 +881,7 @@ int main()
 
 	shutdown_renderer();
 
-	destroy_window(window);
+	window_destroy(window);
 
 	shutdown_platform();
 

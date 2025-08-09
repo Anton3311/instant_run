@@ -102,20 +102,22 @@ void keyboard_hook_shutdown(KeyboardHookHandle hook);
 // Windows
 //
 
-Window* create_window(uint32_t width, uint32_t height, std::wstring_view title);
+Window* window_create(uint32_t width, uint32_t height, std::wstring_view title);
 
-void swap_window_buffers(Window* window);
+void window_show(Window* window);
+void window_hide(Window* window);
+
+void window_swap_buffers(Window* window);
 
 bool window_should_close(const Window* window);
-void poll_window_events(Window* window);
+void window_poll_events(Window* window);
+void window_wait_for_events(Window* window);
 
-Span<const WindowEvent> get_window_events(const Window* window);
+Span<const WindowEvent> window_get_events(const Window* window);
 
-UVec2 get_window_framebuffer_size(const Window* window);
-
-void close_window(Window& window);
-
-void destroy_window(Window* window);
+UVec2 window_get_framebuffer_size(const Window* window);
+void window_close(Window& window);
+void window_destroy(Window* window);
 
 //
 // File system

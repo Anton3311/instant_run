@@ -12,7 +12,6 @@ static HookConfig s_config;
 static State s_state;
 
 extern "C" __declspec(dllexport) void init_keyboard_hook(const HookConfig& config) {
-	std::cout << "init hook\n";
 	s_config = config;
 }
 

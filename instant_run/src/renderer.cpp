@@ -454,7 +454,7 @@ void end_frame() {
 	glClear(GL_COLOR_BUFFER_BIT);
 	glDisable(GL_DEPTH_TEST);
 
-	UVec2 window_frame_buffer_size = get_window_framebuffer_size(s_state.window);
+	UVec2 window_frame_buffer_size = window_get_framebuffer_size(s_state.window);
 	Vec2 viewport_size = static_cast<Vec2>(window_frame_buffer_size);
 
 	glViewport(0.0f, 0.0f, viewport_size.x, viewport_size.y);

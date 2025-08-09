@@ -34,13 +34,14 @@ extern "C" __declspec(dllexport) LRESULT CALLBACK keyboard_hook(int code, WPARAM
 				break;
 			}
 
+			if (s_state.alt_pressed && s_state.space_pressed) {
+				s_config.app_enable_fn();
+				return 1; // Return non-zero value to prevent other hook from recieving the event
+			}
+
 			break;
 		case WM_SYSKEYUP:
 		case WM_KEYUP:
-			if (s_state.space_pressed && s_state.alt_pressed) {
-				s_config.app_enable_fn();
-			}
-
 			switch (virtual_key) {
 			case VK_SPACE:
 				s_state.space_pressed = false;

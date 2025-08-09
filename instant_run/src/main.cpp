@@ -619,6 +619,8 @@ struct App {
 
 	// Keyboard hook
 	KeyboardHookHandle keyboard_hook;
+
+	alignas(64) std::atomic_bool is_active;
 };
 
 static App s_app;
@@ -629,12 +631,28 @@ void enable_app() {
 	std::cout << "enable\n";
 
 	s_app.enable_var.notify_all();
+	s_app.is_active.store(true, std::memory_order::acquire);
+}
+
+// Waits for the hook to notify about the activation
+void wait_for_activation() {
+	// Can happen that the hook notifies before this function is called
+	bool is_already_active = s_app.is_active.load(std::memory_order::relaxed);
+	if (is_already_active) {
+		std::cout << "already activated\n";
+		return;
+	}
+
+	{
+		std::cout << "sleeping\n";
+		std::unique_lock lock(s_app.enable_mutex);
+		s_app.enable_var.wait(lock);
+	}
 }
 
 void enter_sleep_mode() {
-	std::cout << "enter sleep\n";
-	std::unique_lock lock(s_app.enable_mutex);
-	s_app.enable_var.wait(lock);
+	s_app.is_active.store(false, std::memory_order::acquire);
+	wait_for_activation();
 }
 
 bool init_keyboard_hook(Arena& allocator) {
@@ -743,13 +761,9 @@ int main()
 
 	window_hide(window);
 
-	// FIXME: Sometimes it is possible to trigger the keyboard hook and active the app during the init.
-	//        This notify the `condition_variable`, but than the init finishes and the app calls `enter_sleep_mode`,
-	//        which starts waiting on the `condition_variable`,
-	//        thus the user has to press to key combination twice to active the app
-	enter_sleep_mode();
+	wait_for_activation();
 
-	std::cout << "start\n";
+	std::cout << "initial start\n";
 
 	window_show(window);
 	window_focus(window);

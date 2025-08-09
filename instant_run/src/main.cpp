@@ -1,13 +1,13 @@
 #include "platform.h"
 #include "renderer.h"
 #include "ui.h"
+#include "log.h"
 
 #include "hook_config.h"
 
 #include <filesystem>
 #include <string>
 #include <vector>
-#include <iostream>
 #include <mutex>
 
 #undef TRANSPARENT
@@ -628,7 +628,7 @@ static App s_app;
 void enable_app() {
 	PROFILE_FUNCTION();
 
-	std::cout << "enable\n";
+	log_info("recieved activation notification from the keyboard hook");
 
 	s_app.enable_var.notify_all();
 	s_app.is_active.store(true, std::memory_order::acquire);
@@ -639,18 +639,19 @@ void wait_for_activation() {
 	// Can happen that the hook notifies before this function is called
 	bool is_already_active = s_app.is_active.load(std::memory_order::relaxed);
 	if (is_already_active) {
-		std::cout << "already activated\n";
+		log_info("already activated");
 		return;
 	}
 
 	{
-		std::cout << "sleeping\n";
+		log_info("waiting for activation");
 		std::unique_lock lock(s_app.enable_mutex);
 		s_app.enable_var.wait(lock);
 	}
 }
 
 void enter_sleep_mode() {
+	log_info("entering sleep mode");
 	s_app.is_active.store(false, std::memory_order::acquire);
 	wait_for_activation();
 }
@@ -674,6 +675,11 @@ int main()
 
 	Arena arena{};
 	arena.capacity = mb_to_bytes(8);
+
+	log_init("log.txt", true);
+	log_init_thread(arena, "main");
+
+	log_info("logger started");
 
 	init_keyboard_hook(arena);
 
@@ -763,7 +769,7 @@ int main()
 
 	wait_for_activation();
 
-	std::cout << "initial start\n";
+	log_info("initial start");
 
 	window_show(window);
 	window_focus(window);
@@ -889,7 +895,6 @@ int main()
 				sleep_mode = true;
 				break;
 			case EntryAction::CopyPath:
-				std::wcout << entry.path << '\n';
 				break;
 			}
 		}
@@ -921,6 +926,10 @@ int main()
 	shutdown_renderer();
 	window_destroy(window);
 	shutdown_platform();
+
+	log_shutdown_thread();
+	log_shutdown();
+
 	arena_release(arena);
 
 	return 0;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <string_view>
 
 #ifdef ENABLE_PROFILING 
 #include <tracy/Tracy.hpp>
@@ -264,3 +265,25 @@ inline void arena_end_temp(ArenaSavePoint save_point) {
 
 constexpr size_t kb_to_bytes(size_t kb) { return kb * 1024; }
 constexpr size_t mb_to_bytes(size_t mb) { return kb_to_bytes(mb * 1024); }
+
+//
+// String Builder
+//
+
+struct StringBuilder {
+	Arena* arena;
+	const char* string;
+	size_t length;
+};
+
+inline void str_builder_append(StringBuilder& builder, std::string_view string) {
+	char* buffer = arena_alloc_array<char>(*builder.arena, string.length());
+	memcpy(buffer, string.data(), sizeof(char) * string.length());
+
+	builder.length += string.length();
+
+	if (!builder.string) {
+		builder.string = buffer;
+	}
+}
+

@@ -1,6 +1,7 @@
 #include "platform.h"
 
 #include "hook_config.h"
+#include "log.h"
 
 #include <string>
 #include <iostream>
@@ -122,9 +123,15 @@ struct KeyboardHook {
 
 static const char* KEYBOARD_HOOK_FUNCTION_NAME = "keyboard_hook";
 static const char* KEYBOARD_HOOK_INIT_FUNCTION_NAME = "init_keyboard_hook";
+static const char* KEYBOARD_HOOK_WORKER_THREAD_NAME = "low_level_keyboard_hook_thread_worker";
 
 void keyboard_hook_thread_worker(KeyboardHookHandle hook) {
-	PROFILE_NAME_THREAD("low_level_keyboard_hook_thread_worker");
+	PROFILE_NAME_THREAD(KEYBOARD_HOOK_WORKER_THREAD_NAME);
+
+	Arena arena{};
+	arena.capacity = kb_to_bytes(4);
+
+	log_init_thread(arena, KEYBOARD_HOOK_WORKER_THREAD_NAME);
 
 	{
 		PROFILE_SCOPE("initialize_keyboard_hook");
@@ -149,6 +156,9 @@ void keyboard_hook_thread_worker(KeyboardHookHandle hook) {
 		PROFILE_SCOPE("notify_about_hook_deinit");
 		hook->hook_var.notify_all();
 	}
+
+	log_shutdown_thread();
+	arena_release(arena);
 }
 
 KeyboardHookHandle keyboard_hook_init(Arena& allocator, const HookConfig& hook_config) {

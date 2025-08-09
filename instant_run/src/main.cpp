@@ -659,6 +659,9 @@ void wait_for_activation() {
 		std::unique_lock lock(s_app.enable_mutex);
 		s_app.enable_var.wait(lock);
 	}
+
+	// The app was activated
+	s_app.state = AppState::Running;
 }
 
 void enter_sleep_mode() {
@@ -741,6 +744,8 @@ void initialize_app() {
 
 	ui::Options& options = ui::get_options();
 	options.debug_layout_overflow = true;
+
+	s_app.state = AppState::Sleeping;
 }
 
 void initialize_search_entries() {
@@ -763,7 +768,6 @@ void run_app_frame() {
 	PROFILE_FUNCTION();
 
 	bool enter_pressed = false;
-	bool sleep_mode = false;
 
 	const ui::Theme& theme = ui::get_theme();
 	ui::Options& options = ui::get_options();
@@ -776,7 +780,7 @@ void run_app_frame() {
 			if (key_event.action == InputAction::Pressed) {
 				switch (key_event.code) {
 				case KeyCode::Escape:
-					sleep_mode = true;
+					s_app.state = AppState::Sleeping;
 					break;
 				case KeyCode::Enter:
 					enter_pressed = true;
@@ -882,11 +886,11 @@ void run_app_frame() {
 			break;
 		case EntryAction::Launch:
 			run_file(entry.path, false);
-			sleep_mode = true;
+			s_app.state = AppState::Sleeping;
 			break;
 		case EntryAction::LaunchAsAdmin:
 			run_file(entry.path, true);
-			sleep_mode = true;
+			s_app.state = AppState::Sleeping;
 			break;
 		case EntryAction::CopyPath:
 			break;
@@ -899,14 +903,6 @@ void run_app_frame() {
 	end_frame();
 
 	window_swap_buffers(s_app.window);
-
-	if (sleep_mode) {
-		window_hide(s_app.window);
-		enter_sleep_mode();
-
-		window_show(s_app.window);
-		window_focus(s_app.window);
-	}
 }
 
 int main()
@@ -932,19 +928,31 @@ int main()
 
 	window_hide(s_app.window);
 
-	wait_for_activation();
+	{
+		wait_for_activation();
+		log_info("initial start");
 
-	log_info("initial start");
-
-	window_show(s_app.window);
-	window_focus(s_app.window);
+		window_show(s_app.window);
+		window_focus(s_app.window);
+	}
 
 	while (!window_should_close(s_app.window)) {
-		PROFILE_BEGIN_FRAME("Main");
-		window_poll_events(s_app.window);
 
-		run_app_frame();
-		PROFILE_END_FRAME("Main");
+		switch (s_app.state) {
+		case AppState::Running:
+			PROFILE_BEGIN_FRAME("Main");
+			window_poll_events(s_app.window);
+			run_app_frame();
+			PROFILE_END_FRAME("Main");
+			break;
+		case AppState::Sleeping:
+			window_hide(s_app.window);
+			enter_sleep_mode();
+
+			window_show(s_app.window);
+			window_focus(s_app.window);
+			break;
+		}
 	}
 
 	shutdown_keyboard_hook();

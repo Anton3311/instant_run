@@ -32,6 +32,58 @@ struct Icons {
 	Rect copy;
 };
 
+struct Entry {
+	std::wstring name;
+	std::filesystem::path path;
+	UVec2 icon;
+};
+
+struct ResultEntry {
+	uint32_t entry_index;
+	uint32_t score;
+
+	RangeU32 highlights;
+};
+
+struct ResultViewState {
+	uint32_t selected_index;
+	uint32_t scroll_offset;
+	uint32_t fully_visible_item_count;
+	
+	std::vector<ResultEntry> matches;
+	std::vector<RangeU32> highlights;
+};
+
+
+enum class AppState {
+	Running,
+	Sleeping,
+};
+
+struct App {
+	AppState state;
+	std::mutex enable_mutex;
+	std::condition_variable enable_var;
+
+	// Keyboard hook
+	KeyboardHookHandle keyboard_hook;
+
+	alignas(64) std::atomic_bool is_active;
+
+	// App state
+	Font font;
+	Arena arena;
+	Window* window;
+	Icons icons;
+	ApplicationIconsStorage app_icon_storage;
+	ui::TextInputState search_input_state;
+	std::vector<Entry> entries;
+	ResultViewState result_view_state;
+	Color highlight_color;
+};
+
+static App s_app;
+
 void initialize_app_icon_storage(ApplicationIconsStorage& storage, uint32_t icon_size, uint32_t grid_size) {
 	PROFILE_FUNCTION();
 	uint32_t texture_size = icon_size * grid_size;
@@ -74,28 +126,6 @@ Rect get_icon_rect(const ApplicationIconsStorage& storage, UVec2 icon_position) 
 
 	return uv_rect;
 }
-
-struct Entry {
-	std::wstring name;
-	std::filesystem::path path;
-	UVec2 icon;
-};
-
-struct ResultEntry {
-	uint32_t entry_index;
-	uint32_t score;
-
-	RangeU32 highlights;
-};
-
-struct ResultViewState {
-	uint32_t selected_index;
-	uint32_t scroll_offset;
-	uint32_t fully_visible_item_count;
-	
-	std::vector<ResultEntry> matches;
-	std::vector<RangeU32> highlights;
-};
 
 bool starts_with(std::wstring_view string, std::wstring_view start_pattern) {
 	PROFILE_FUNCTION();
@@ -443,7 +473,6 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	}
 
 	{
-
 		Color widget_color = theme.widget_color;
 		if (hovered || is_selected) {
 			widget_color = theme.widget_hovered_color;
@@ -607,24 +636,6 @@ void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage
 	}
 }
 
-enum class AppState {
-	Running,
-	Sleeping,
-};
-
-struct App {
-	AppState state;
-	std::mutex enable_mutex;
-	std::condition_variable enable_var;
-
-	// Keyboard hook
-	KeyboardHookHandle keyboard_hook;
-
-	alignas(64) std::atomic_bool is_active;
-};
-
-static App s_app;
-
 void enable_app() {
 	PROFILE_FUNCTION();
 
@@ -669,27 +680,14 @@ void shutdown_keyboard_hook() {
 	keyboard_hook_shutdown(s_app.keyboard_hook);
 }
 
-int main()
-{
-	query_system_memory_spec();
+void initialize_app() {
+	PROFILE_FUNCTION();
+	s_app.window = window_create(800, 500, L"Instant Run");
 
-	Arena arena{};
-	arena.capacity = mb_to_bytes(8);
+	initialize_renderer(s_app.window);
+	initialize_app_icon_storage(s_app.app_icon_storage, 32, 32);
 
-	log_init("log.txt", true);
-	log_init_thread(arena, "main");
-
-	log_info("logger started");
-
-	init_keyboard_hook(arena);
-
-	initialize_platform();
-
-	Window* window = window_create(800, 500, L"Instant Run");
-
-	initialize_renderer(window);
-
-	Icons icons{};
+	Icons& icons = s_app.icons;
 	load_texture("./assets/icons.png", icons.texture);
 	icons.search = create_icon(UVec2 { 0, 0 }, icons.texture);
 	icons.close = create_icon(UVec2 { 1, 0 }, icons.texture);
@@ -699,13 +697,10 @@ int main()
 	icons.run_as_admin = create_icon(UVec2 { 1, 1 }, icons.texture);
 	icons.copy = create_icon(UVec2 { 2, 1 }, icons.texture);
 
-	Font font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f, arena);
+	s_app.font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f, s_app.arena);
+
 	ui::Theme theme{};
-	theme.default_font = &font;
-
-	ApplicationIconsStorage app_icon_storage{};
-	initialize_app_icon_storage(app_icon_storage, 32, 32);
-
+	theme.default_font = &s_app.font;
 	theme.window_background = color_from_hex(0x242222FF);
 
 	theme.widget_color = color_from_hex(0x242222FF);
@@ -735,202 +730,237 @@ int main()
 	theme.icon_hovered_color = WHITE;
 	theme.icon_pressed_color = theme.prompt_text_color;
 
-	Color highlight_color = color_from_hex(0xE6A446FF);
+	s_app.highlight_color = color_from_hex(0xE6A446FF);
 
 	constexpr size_t INPUT_BUFFER_SIZE = 128;
-	wchar_t text_buffer[INPUT_BUFFER_SIZE];
-	ui::TextInputState input_state{};
-	input_state.buffer = Span(text_buffer, INPUT_BUFFER_SIZE);
+	ui::TextInputState& input_state = s_app.search_input_state;
+	input_state.buffer = Span(arena_alloc_array<wchar_t>(s_app.arena, INPUT_BUFFER_SIZE), INPUT_BUFFER_SIZE);
 
-	ui::initialize(*window);
+	ui::initialize(*s_app.window);
 	ui::set_theme(theme);
 
 	ui::Options& options = ui::get_options();
 	options.debug_layout_overflow = true;
+}
 
-	std::vector<Entry> entries;
+void initialize_search_entries() {
+	PROFILE_FUNCTION();
 
 	std::vector<std::filesystem::path> known_folders = get_user_folders(
 			UserFolderKind::Desktop | UserFolderKind::StartMenu | UserFolderKind::Programs);
+
 	for (const auto& known_folder : known_folders) {
 		try {
-			walk_directory(known_folder, entries);
+			walk_directory(known_folder, s_app.entries);
 		} catch (std::exception e) {
 		}
 	}
 
-	load_application_icons(entries, app_icon_storage, arena);
+	load_application_icons(s_app.entries, s_app.app_icon_storage, s_app.arena);
+}
 
-	ResultViewState result_view_state{};
+void run_app_frame() {
+	PROFILE_FUNCTION();
 
-	update_search_result({}, entries, result_view_state.matches, result_view_state.highlights, arena);
+	bool enter_pressed = false;
+	bool sleep_mode = false;
 
-	window_hide(window);
+	const ui::Theme& theme = ui::get_theme();
+	ui::Options& options = ui::get_options();
+
+	Span<const WindowEvent> events = window_get_events(s_app.window);
+	for (size_t i = 0; i < events.count; i++) {
+		switch (events[i].kind) {
+		case WindowEventKind::Key: {
+			auto& key_event = events[i].data.key;
+			if (key_event.action == InputAction::Pressed) {
+				switch (key_event.code) {
+				case KeyCode::Escape:
+					sleep_mode = true;
+					break;
+				case KeyCode::Enter:
+					enter_pressed = true;
+					break;
+				case KeyCode::F3:
+					options.debug_layout = !options.debug_layout;
+					break;
+				default:
+					process_result_view_key_event(s_app.result_view_state, key_event.code);
+					break;
+				}
+			}
+			break;
+		}
+		default:
+			break;
+		}
+	}
+
+	begin_frame();
+	ui::begin_frame();
+
+	{
+		ui::begin_horizontal_layout();
+
+		Icons& icons = s_app.icons;
+
+		float icon_width = ui::get_default_widget_height(); // icons are square
+		float text_field_width = ui::get_available_layout_region_size().x
+			- (icon_width + theme.default_layout_config.item_spacing) * 2.0f;
+
+		ui::icon(icons.texture, icons.search);
+
+		ui::push_next_item_fixed_size(text_field_width);
+
+		if (ui::text_input(s_app.search_input_state, L"Search ...")) {
+			std::wstring_view search_pattern(s_app.search_input_state.buffer.values, s_app.search_input_state.text_length);
+			update_search_result(search_pattern,
+					s_app.entries,
+					s_app.result_view_state.matches,
+					s_app.result_view_state.highlights,
+					s_app.arena);
+
+			s_app.result_view_state.selected_index = 0;
+		}
+
+		ui::WidgetStyle close_icon_style = theme.default_button_style;
+		close_icon_style.color = TRANSPARENT;
+		close_icon_style.hovered_color = TRANSPARENT;
+		close_icon_style.pressed_color = TRANSPARENT;
+
+		if (ui::icon_button(icons.texture, icons.close, &close_icon_style)) {
+			s_app.search_input_state.text_length = 0;
+		}
+
+		ui::end_horizontal_layout();
+	}
+
+	ui::separator();
+
+	ui::LayoutConfig result_list_layout_config{};
+	result_list_layout_config.padding = Vec2{};
+	result_list_layout_config.allow_overflow = true;
+	result_list_layout_config.item_spacing = theme.default_layout_config.item_spacing;
+	ui::begin_vertical_layout(&result_list_layout_config);
+
+	float available_height = ui::get_available_layout_space();
+	float item_height = compute_result_entry_height();
+	float item_spacing = theme.default_layout_config.item_spacing;
+
+	float item_count = (available_height + item_spacing) / (item_height + item_spacing);
+	s_app.result_view_state.fully_visible_item_count = std::floor(item_count);
+	uint32_t partially_visible_item_count = (uint32_t)std::ceil(item_count);
+
+	update_result_view_scroll(s_app.result_view_state);
+
+	uint32_t visible_item_count = std::min(
+			partially_visible_item_count,
+			(uint32_t)s_app.result_view_state.matches.size() - s_app.result_view_state.scroll_offset);
+
+	auto& result_view_state = s_app.result_view_state;
+
+	for (uint32_t i = result_view_state.scroll_offset; i < result_view_state.scroll_offset + visible_item_count; i++) {
+		bool is_selected = i == result_view_state.selected_index;
+
+		const ResultEntry& match = s_app.result_view_state.matches[i];
+		const Entry& entry = s_app.entries[match.entry_index];
+
+		EntryAction action = draw_result_entry(match,
+				entry,
+				s_app.result_view_state,
+				is_selected,
+				s_app.highlight_color,
+				s_app.app_icon_storage,
+				s_app.icons);
+
+		if (action == EntryAction::None && is_selected && enter_pressed) {
+			action = EntryAction::Launch;
+		}
+
+		switch (action) {
+		case EntryAction::None:
+			break;
+		case EntryAction::Launch:
+			run_file(entry.path, false);
+			sleep_mode = true;
+			break;
+		case EntryAction::LaunchAsAdmin:
+			run_file(entry.path, true);
+			sleep_mode = true;
+			break;
+		case EntryAction::CopyPath:
+			break;
+		}
+	}
+
+	ui::end_vertical_layout();
+
+	ui::end_frame();
+	end_frame();
+
+	window_swap_buffers(s_app.window);
+
+	if (sleep_mode) {
+		window_hide(s_app.window);
+		enter_sleep_mode();
+
+		window_show(s_app.window);
+		window_focus(s_app.window);
+	}
+}
+
+int main()
+{
+	query_system_memory_spec();
+
+	s_app.arena = {};
+	s_app.arena.capacity = mb_to_bytes(8);
+
+	log_init("log.txt", true);
+	log_init_thread(s_app.arena, "main");
+
+	log_info("logger started");
+
+	initialize_platform();
+
+	init_keyboard_hook(s_app.arena);
+
+	initialize_app();
+	initialize_search_entries();
+
+	update_search_result({}, s_app.entries, s_app.result_view_state.matches, s_app.result_view_state.highlights, s_app.arena);
+
+	window_hide(s_app.window);
 
 	wait_for_activation();
 
 	log_info("initial start");
 
-	window_show(window);
-	window_focus(window);
+	window_show(s_app.window);
+	window_focus(s_app.window);
 
-	while (!window_should_close(window)) {
+	while (!window_should_close(s_app.window)) {
 		PROFILE_BEGIN_FRAME("Main");
+		window_poll_events(s_app.window);
 
-		window_poll_events(window);
-
-		bool enter_pressed = false;
-		bool sleep_mode = false;
-
-		Span<const WindowEvent> events = window_get_events(window);
-		for (size_t i = 0; i < events.count; i++) {
-			switch (events[i].kind) {
-			case WindowEventKind::Key: {
-				auto& key_event = events[i].data.key;
-				if (key_event.action == InputAction::Pressed) {
-					switch (key_event.code) {
-					case KeyCode::Escape:
-						sleep_mode = true;
-						break;
-					case KeyCode::Enter:
-						enter_pressed = true;
-						break;
-					case KeyCode::F3:
-						options.debug_layout = !options.debug_layout;
-						break;
-					default:
-						process_result_view_key_event(result_view_state, key_event.code);
-						break;
-					}
-				}
-				break;
-		    }
-			default:
-				break;
-			}
-		}
-
-		begin_frame();
-		ui::begin_frame();
-
-		{
-			ui::begin_horizontal_layout();
-
-			float icon_width = ui::get_default_widget_height(); // icons are square
-			float text_field_width = ui::get_available_layout_region_size().x
-				- (icon_width + theme.default_layout_config.item_spacing) * 2.0f;
-
-			ui::icon(icons.texture, icons.search);
-
-			ui::push_next_item_fixed_size(text_field_width);
-
-			if (ui::text_input(input_state, L"Search ...")) {
-				std::wstring_view search_pattern(text_buffer, input_state.text_length);
-				update_search_result(search_pattern, entries, result_view_state.matches, result_view_state.highlights, arena);
-
-				result_view_state.selected_index = 0;
-			}
-
-			ui::WidgetStyle close_icon_style = theme.default_button_style;
-			close_icon_style.color = TRANSPARENT;
-			close_icon_style.hovered_color = TRANSPARENT;
-			close_icon_style.pressed_color = TRANSPARENT;
-
-			if (ui::icon_button(icons.texture, icons.close, &close_icon_style)) {
-				input_state.text_length = 0;
-			}
-
-			ui::end_horizontal_layout();
-		}
-
-		ui::separator();
-
-		ui::LayoutConfig result_list_layout_config{};
-		result_list_layout_config.padding = Vec2{};
-		result_list_layout_config.allow_overflow = true;
-		result_list_layout_config.item_spacing = theme.default_layout_config.item_spacing;
-		ui::begin_vertical_layout(&result_list_layout_config);
-
-		float available_height = ui::get_available_layout_space();
-		float item_height = compute_result_entry_height();
-		float item_spacing = theme.default_layout_config.item_spacing;
-
-		float item_count = (available_height + item_spacing) / (item_height + item_spacing);
-		result_view_state.fully_visible_item_count = std::floor(item_count);
-		uint32_t partially_visible_item_count = (uint32_t)std::ceil(item_count);
-
-		update_result_view_scroll(result_view_state);
-
-		uint32_t visible_item_count = std::min(
-				partially_visible_item_count,
-				(uint32_t)result_view_state.matches.size() - result_view_state.scroll_offset);
-
-		for (uint32_t i = result_view_state.scroll_offset; i < result_view_state.scroll_offset + visible_item_count; i++) {
-			bool is_selected = i == result_view_state.selected_index;
-
-			const ResultEntry& match = result_view_state.matches[i];
-			const Entry& entry = entries[match.entry_index];
-
-			EntryAction action = draw_result_entry(match,
-					entry,
-					result_view_state,
-					is_selected,
-					highlight_color,
-					app_icon_storage,
-					icons);
-
-			if (action == EntryAction::None && is_selected && enter_pressed) {
-				action = EntryAction::Launch;
-			}
-
-			switch (action) {
-			case EntryAction::None:
-				break;
-			case EntryAction::Launch:
-				run_file(entry.path, false);
-				sleep_mode = true;
-				break;
-			case EntryAction::LaunchAsAdmin:
-				run_file(entry.path, true);
-				sleep_mode = true;
-				break;
-			case EntryAction::CopyPath:
-				break;
-			}
-		}
-
-		ui::end_vertical_layout();
-
-		ui::end_frame();
-		end_frame();
-
-		window_swap_buffers(window);
-
+		run_app_frame();
 		PROFILE_END_FRAME("Main");
-
-		if (sleep_mode) {
-			window_hide(window);
-			enter_sleep_mode();
-
-			window_show(window);
-			window_focus(window);
-		}
 	}
 
 	shutdown_keyboard_hook();
 
-	delete_texture(app_icon_storage.texture);
-	delete_texture(icons.texture);
-	delete_font(font);
+	delete_texture(s_app.app_icon_storage.texture);
+	delete_texture(s_app.icons.texture);
+	delete_font(s_app.font);
 
 	shutdown_renderer();
-	window_destroy(window);
+	window_destroy(s_app.window);
 	shutdown_platform();
 
 	log_shutdown_thread();
 	log_shutdown();
 
-	arena_release(arena);
+	arena_release(s_app.arena);
 
 	return 0;
 }

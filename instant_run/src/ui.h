@@ -82,6 +82,11 @@ struct TextInputState {
 	Span<wchar_t> buffer;
 };
 
+inline void text_input_state_clear(TextInputState& state) {
+	state.cursor_position = 0;
+	state.text_length = 0;
+}
+
 void initialize(const Window& window);
 
 void begin_frame();

@@ -651,10 +651,7 @@ void wait_for_activation() {
 	bool is_already_active = s_app.is_active.load(std::memory_order::relaxed);
 	if (is_already_active) {
 		log_info("already activated");
-		return;
-	}
-
-	{
+	} else {
 		log_info("waiting for activation");
 		std::unique_lock lock(s_app.enable_mutex);
 		s_app.enable_var.wait(lock);
@@ -762,6 +759,13 @@ void initialize_search_entries() {
 	}
 
 	load_application_icons(s_app.entries, s_app.app_icon_storage, s_app.arena);
+}
+
+void clear_search_result() {
+	PROFILE_FUNCTION();
+
+	ui::text_input_state_clear(s_app.search_input_state);
+	update_search_result({}, s_app.entries, s_app.result_view_state.matches, s_app.result_view_state.highlights, s_app.arena);
 }
 
 void run_app_frame() {
@@ -887,10 +891,12 @@ void run_app_frame() {
 		case EntryAction::Launch:
 			run_file(entry.path, false);
 			s_app.state = AppState::Sleeping;
+			clear_search_result();
 			break;
 		case EntryAction::LaunchAsAdmin:
 			run_file(entry.path, true);
 			s_app.state = AppState::Sleeping;
+			clear_search_result();
 			break;
 		case EntryAction::CopyPath:
 			break;
@@ -924,7 +930,7 @@ int main()
 	initialize_app();
 	initialize_search_entries();
 
-	update_search_result({}, s_app.entries, s_app.result_view_state.matches, s_app.result_view_state.highlights, s_app.arena);
+	clear_search_result();
 
 	window_hide(s_app.window);
 

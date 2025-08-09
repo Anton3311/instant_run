@@ -632,6 +632,7 @@ void enable_app() {
 }
 
 void enter_sleep_mode() {
+	std::cout << "enter sleep\n";
 	std::unique_lock lock(s_app.enable_mutex);
 	s_app.enable_var.wait(lock);
 }
@@ -740,12 +741,26 @@ int main()
 
 	update_search_result({}, entries, result_view_state.matches, result_view_state.highlights, arena);
 
+	window_hide(window);
+
+	// FIXME: Sometimes it is possible to trigger the keyboard hook and active the app during the init.
+	//        This notify the `condition_variable`, but than the init finishes and the app calls `enter_sleep_mode`,
+	//        which starts waiting on the `condition_variable`,
+	//        thus the user has to press to key combination twice to active the app
+	enter_sleep_mode();
+
+	std::cout << "start\n";
+
+	window_show(window);
+	window_focus(window);
+
 	while (!window_should_close(window)) {
 		PROFILE_BEGIN_FRAME("Main");
 
 		window_poll_events(window);
 
 		bool enter_pressed = false;
+		bool sleep_mode = false;
 
 		Span<const WindowEvent> events = window_get_events(window);
 		for (size_t i = 0; i < events.count; i++) {
@@ -755,7 +770,7 @@ int main()
 				if (key_event.action == InputAction::Pressed) {
 					switch (key_event.code) {
 					case KeyCode::Escape:
-						window_hide(window);
+						sleep_mode = true;
 						break;
 					case KeyCode::Enter:
 						enter_pressed = true;
@@ -853,9 +868,11 @@ int main()
 				break;
 			case EntryAction::Launch:
 				run_file(entry.path, false);
+				sleep_mode = true;
 				break;
 			case EntryAction::LaunchAsAdmin:
 				run_file(entry.path, true);
+				sleep_mode = true;
 				break;
 			case EntryAction::CopyPath:
 				std::wcout << entry.path << '\n';
@@ -871,6 +888,14 @@ int main()
 		window_swap_buffers(window);
 
 		PROFILE_END_FRAME("Main");
+
+		if (sleep_mode) {
+			window_hide(window);
+			enter_sleep_mode();
+
+			window_show(window);
+			window_focus(window);
+		}
 	}
 
 	shutdown_keyboard_hook();
@@ -880,11 +905,8 @@ int main()
 	delete_font(font);
 
 	shutdown_renderer();
-
 	window_destroy(window);
-
 	shutdown_platform();
-
 	arena_release(arena);
 
 	return 0;

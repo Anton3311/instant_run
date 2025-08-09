@@ -299,7 +299,7 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title) 
 	window->handle = CreateWindowExW(0,
 		WINDOW_CLASS_NAME,
 		window->title.c_str(),
-		WS_POPUP | WS_MINIMIZE,
+		WS_POPUP,
 		window_x,
 		window_y,
 		static_cast<int>(window->width),
@@ -313,23 +313,10 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title) 
 		return nullptr;
 	}
 
-	ShowWindow(window->handle, SW_HIDE);
-
-	{
-		LONG_PTR style = GetWindowLongPtr(window->handle, GWL_STYLE);
-		style |= WS_THICKFRAME;
-		style &= ~WS_CAPTION;
-		SetWindowLongPtr(window->handle, GWL_STYLE, style);
-	}
-
-#if 0
-	{
-		LONG_PTR style = GetWindowLongPtr(window->handle, GWL_EXSTYLE);
-		style |= WS_EX_TOOLWINDOW | WS_EX_APPWINDOW;
-		// style &= ~WS_EX_APPWINDOW;
-		SetWindowLongPtr(window->handle, GWL_EXSTYLE, style);
-	}
-#endif
+	LONG_PTR style = GetWindowLongPtr(window->handle, GWL_STYLE);
+	style |= WS_THICKFRAME;
+	style &= ~WS_CAPTION;
+	SetWindowLongPtr(window->handle, GWL_STYLE, style);
 
 	MARGINS margins{ 1, 1, 1, 1 };
 	DwmExtendFrameIntoClientArea(window->handle, &margins);
@@ -337,7 +324,6 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title) 
 	SetWindowPos(window->handle, NULL, 0, 0, width, height, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCOPYBITS);
 
 	SetWindowLongPtrW(window->handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
-	ShowWindow(window->handle, SW_SHOW);
 
 	create_opengl_context(window);
 	init_opengl(window);
@@ -350,7 +336,41 @@ void window_show(Window* window) {
 }
 
 void window_hide(Window* window) {
-	ShowWindow(window->handle, SW_MINIMIZE);
+	ShowWindow(window->handle, SW_HIDE);
+}
+
+void window_focus(Window* window) {
+	EnableWindow(window->handle, true);
+
+	if (!SetActiveWindow(window->handle)) {
+		std::cout << "Failed to set active window: ";
+		platform_log_error_message();
+		std::cout << '\n';
+		return;
+	}
+
+	if (!BringWindowToTop(window->handle)) {
+		std::cout << "Failed to bring window to front: ";
+		platform_log_error_message();
+		std::cout << '\n';
+		return;
+	}
+
+	if (!SetForegroundWindow(window->handle)) {
+		std::cout << "Failed to set foreground window: ";
+		platform_log_error_message();
+		std::cout << '\n';
+		return;
+	}
+
+	SetFocus(window->handle);
+
+	if (GetLastError() == 0x57) {
+		std::cout << "Failed to focus window: ";
+		platform_log_error_message();
+		std::cout << '\n';
+		return;
+	}
 }
 
 void window_swap_buffers(Window* window) {

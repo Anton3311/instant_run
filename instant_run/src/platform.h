@@ -106,6 +106,7 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title);
 
 void window_show(Window* window);
 void window_hide(Window* window);
+void window_focus(Window* window);
 
 void window_swap_buffers(Window* window);
 

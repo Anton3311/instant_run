@@ -938,10 +938,14 @@ void run_app_frame() {
 	s_app.wait_for_window_events = true;
 }
 
-int main()
-{
-	// TODO: Add a cmd arg to disable (or enable) a keyboard hook
+int main (int argc, char *argv[]) {
 	s_app.use_keyboard_hook = false;
+	if (argc == 2) {
+		if (std::strcmp(argv[1], "hook") == 0) {
+			s_app.use_keyboard_hook = true;
+		}
+	}
+
 	query_system_memory_spec();
 
 	s_app.arena = {};

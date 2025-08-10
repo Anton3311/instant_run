@@ -122,6 +122,8 @@ void main()
 )";
 
 static GLuint create_shader_from_source(const char* source, GLenum type) {
+	PROFILE_FUNCTION();
+
 	GLuint shader = glCreateShader(type);
 	glShaderSource(shader, 1, &source, 0);
 	glCompileShader(shader);
@@ -150,6 +152,8 @@ static GLuint create_shader_from_source(const char* source, GLenum type) {
 }
 
 static bool create_shaders() {
+	PROFILE_FUNCTION();
+
 	GLuint vertex_shader = create_shader_from_source(s_vertex_shader_source, GL_VERTEX_SHADER);
 	if (vertex_shader == 0)
 		return false;
@@ -204,6 +208,8 @@ static bool create_shaders() {
 }
 
 static void create_buffers() {
+	PROFILE_FUNCTION();
+
 	glCreateBuffers(1, &s_state.vertex_buffer_id);
 	glCreateBuffers(1, &s_state.index_buffer_id);
 

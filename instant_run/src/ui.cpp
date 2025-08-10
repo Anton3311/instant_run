@@ -305,8 +305,8 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text, float max_width
 
 	for (size_t i = 0; i < text.size(); i++) {
 		uint32_t c = text[i];
-
-		if (c < font.char_range_start || c >= font.char_range_start + font.glyph_count) {
+		uint32_t glyph_index = font_get_glyph_index(font, c);
+		if (glyph_index == UINT32_MAX) {
 			continue;
 		}
 
@@ -316,7 +316,7 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text, float max_width
 		stbtt_GetBakedQuad(font.glyphs,
 				font.atlas.width,
 				font.atlas.height,
-				c - font.char_range_start,
+				glyph_index,
 				&char_position.x,
 				&char_position.y,
 				&quad,
@@ -469,12 +469,9 @@ static bool text_input_behaviour(TextInputState& input_state) {
 			
 			if (input_state.text_length < input_state.buffer.count) {
 				// HACK: Allow any char
-				
-				uint32_t char_range_end = s_ui_state.theme.default_font->char_range_start
-					+ s_ui_state.theme.default_font->glyph_count;
 
-				if ((uint32_t)char_event.c >= s_ui_state.theme.default_font->char_range_start
-						&& (uint32_t)char_event.c < char_range_end) {
+				uint32_t glyph_index = font_get_glyph_index(*s_ui_state.theme.default_font, char_event.c);
+				if (glyph_index != UINT32_MAX) {
 					
 					size_t after_cursor_text_length = input_state.text_length - input_state.cursor_position;
 					for (int64_t i = input_state.text_length; i > input_state.cursor_position; i--) {

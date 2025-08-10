@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <vector>
 #include <fstream>
+#include <assert.h>
 
 #define _USE_MATH_DEFINES
 #include <cmath>
@@ -371,12 +372,79 @@ void delete_texture(const Texture& texture) {
 	glDeleteTextures(1, &texture.internal_id);
 }
 
-Font create_font(const uint8_t* data, size_t data_size, float font_size) {
+static RangeU32 s_supported_char_ranges[] = {
+	RangeU32 { 0x0020, 94 },
+	RangeU32 { 0x0400, 256 }
+};
+
+static uint32_t s_supported_char_range_count = sizeof(s_supported_char_ranges) / sizeof(RangeU32);
+
+void rasterize_glyphs(Font& font,
+		float pixel_height,
+		uint8_t* pixels,
+		int pw,
+		int ph,
+		stbtt_bakedchar* chardata) {
 	PROFILE_FUNCTION();
+
+	float scale;
+	int x, y, bottom_y;
+
+	std::memset(pixels, 0, pw * ph); // background of 0 around pixels
+	x = y = 1;
+	bottom_y = 1;
+
+	scale = stbtt_ScaleForPixelHeight(&font.info, pixel_height);
+
+	size_t chardata_index = 0;
+	for (RangeU32 char_range : font.char_ranges) {
+		for (uint32_t i = 0; i < char_range.count; ++i) {
+			int advance, lsb, x0,y0,x1,y1,gw,gh;
+
+			uint32_t codepoint = char_range.start + i;
+
+			int g = stbtt_FindGlyphIndex(&font.info, codepoint);
+			stbtt_GetGlyphHMetrics(&font.info, g, &advance, &lsb);
+			stbtt_GetGlyphBitmapBox(&font.info, g, scale,scale, &x0,&y0,&x1,&y1);
+			gw = x1-x0;
+			gh = y1-y0;
+			if (x + gw + 1 >= pw)
+				y = bottom_y, x = 1; // advance to next row
+			if (y + gh + 1 >= ph) // check if it fits vertically AFTER potentially moving to next row
+				return;
+
+			assert(x+gw < pw);
+			assert(y+gh < ph);
+
+			stbtt_MakeGlyphBitmap(&font.info, pixels+x+y*pw, gw,gh,pw, scale,scale, g);
+			chardata[chardata_index].x0 = (int16_t) x;
+			chardata[chardata_index].y0 = (int16_t) y;
+			chardata[chardata_index].x1 = (int16_t) (x + gw);
+			chardata[chardata_index].y1 = (int16_t) (y + gh);
+			chardata[chardata_index].xadvance = scale * advance;
+			chardata[chardata_index].xoff     = (float) x0;
+			chardata[chardata_index].yoff     = (float) y0;
+
+			chardata_index += 1;
+
+			x = x + gw + 1;
+			if (y+gh+1 > bottom_y)
+				bottom_y = y+gh+1;
+		}
+	}
+}
+
+Font create_font(const uint8_t* data, size_t data_size, float font_size, Arena& arena) {
+	PROFILE_FUNCTION();
+
 	Font font{};
-	font.char_range_start = 32;
-	font.glyph_count = 96;
-	font.glyphs = new stbtt_bakedchar[font.glyph_count];
+	font.char_ranges = Span<const RangeU32>(s_supported_char_ranges, s_supported_char_range_count);
+
+	for (RangeU32 range : font.char_ranges) {
+		font.glyph_count += range.count;
+	}
+
+	font.glyphs = arena_alloc_array<stbtt_bakedchar>(arena, font.glyph_count);
 	font.size = font_size;
 
 	if (!stbtt_InitFont(&font.info, data, 0)) {
@@ -388,30 +456,29 @@ Font create_font(const uint8_t* data, size_t data_size, float font_size) {
 	int32_t texture_size = 512;
 	size_t pixel_count = static_cast<size_t>(texture_size) * static_cast<size_t>(texture_size);
 
-	uint8_t* bitmap = new uint8_t[pixel_count];
+	{
+		ArenaSavePoint temp = arena_begin_temp(arena);
+		uint8_t* bitmap = arena_alloc_array<uint8_t>(arena, pixel_count);
 
-	stbtt_BakeFontBitmap(data,
-			0,
-			font.size,
-			bitmap,
-			texture_size,
-			texture_size,
-			static_cast<int32_t>(font.char_range_start),
-			static_cast<int32_t>(font.glyph_count),
-			font.glyphs);
+		rasterize_glyphs(font,
+				font.size,
+				bitmap,
+				texture_size,
+				texture_size,
+				font.glyphs);
 
-	uint32_t* rgba_bitmap = new uint32_t[pixel_count];
-	
-	for (size_t i = 0; i < pixel_count; i++) {
-		uint8_t r = bitmap[i];
+		uint32_t* rgba_bitmap = arena_alloc_array<uint32_t>(arena, pixel_count);
+		
+		for (size_t i = 0; i < pixel_count; i++) {
+			uint8_t r = bitmap[i];
 
-		rgba_bitmap[i] = 0xffffff | (r << 24);
+			rgba_bitmap[i] = 0xffffff | (r << 24);
+		}
+
+		font.atlas = create_texture(TextureFormat::R8_G8_B8_A8, texture_size, texture_size, rgba_bitmap);
+
+		arena_end_temp(temp);
 	}
-
-	font.atlas = create_texture(TextureFormat::R8_G8_B8_A8, texture_size, texture_size, rgba_bitmap);
-
-	delete[] rgba_bitmap;
-	delete[] bitmap;
 
 	return font;
 }
@@ -430,14 +497,25 @@ Font load_font_from_file(const std::filesystem::path& path, float font_size, Are
 	uint8_t* font_data = reinterpret_cast<uint8_t*>(arena_alloc_aligned(arena, file_size, 16));
 	stream.read(reinterpret_cast<char*>(font_data), file_size);
 
-	return create_font(font_data, file_size, font_size);
+	return create_font(font_data, file_size, font_size, arena);
 }
 
 void delete_font(const Font& font) {
 	PROFILE_FUNCTION();
 	delete_texture(font.atlas);
+}
 
-	delete[] font.glyphs;
+uint32_t font_get_glyph_index(const Font& font, uint32_t codepoint) {
+	uint32_t offset = 0;
+	for (RangeU32 range : font.char_ranges) {
+		if (codepoint >= range.start && codepoint < range.start + range.count) {
+			return offset + codepoint - range.start;
+		} else {
+			offset += range.count;
+		}
+	}
+
+	return UINT32_MAX;
 }
 
 float font_get_height(const Font& font) {
@@ -682,7 +760,8 @@ void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color co
 
 	for (size_t i = 0; i < text.size(); i++) {
 		uint32_t c = text[i];
-		if (c < font.char_range_start || c >= font.char_range_start + font.glyph_count) {
+		uint32_t glyph_index = font_get_glyph_index(font, c);
+		if (glyph_index == UINT32_MAX) {
 			continue;
 		}
 
@@ -690,7 +769,7 @@ void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color co
 		stbtt_GetBakedQuad(font.glyphs,
 				font.atlas.width,
 				font.atlas.height,
-				c - font.char_range_start,
+				glyph_index,
 				&char_position.x,
 				&char_position.y,
 				&quad,

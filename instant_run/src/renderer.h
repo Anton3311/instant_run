@@ -27,7 +27,7 @@ struct Font {
 	stbtt_fontinfo info;
 	stbtt_bakedchar* glyphs;
 
-	uint32_t char_range_start;
+	Span<const RangeU32> char_ranges;
 
 	Texture atlas;
 
@@ -45,10 +45,11 @@ void upload_texture_region(const Texture& texture, UVec2 offset, UVec2 size, con
 bool load_texture(const std::filesystem::path& path, Texture& out_texture);
 void delete_texture(const Texture& texture);
 
-Font create_font(const uint8_t* data, size_t data_size, float font_size);
+Font create_font(const uint8_t* data, size_t data_size, float font_size, Arena& arena);
 Font load_font_from_file(const std::filesystem::path& path, float font_size, Arena& arena);
 void delete_font(const Font& font);
 
+uint32_t font_get_glyph_index(const Font& font, uint32_t codepoint);
 float font_get_height(const Font& font);
 
 void begin_frame();

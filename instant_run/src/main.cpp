@@ -10,8 +10,6 @@
 #include <vector>
 #include <mutex>
 
-#undef TRANSPARENT
-
 static constexpr UVec2 INVALID_ICON_POSITION = UVec2 { UINT32_MAX, UINT32_MAX };
 
 struct ApplicationIconsStorage {
@@ -71,6 +69,7 @@ struct App {
 	alignas(64) std::atomic_bool is_active;
 
 	// App state
+	bool use_keyboard_hook;
 	Font font;
 	Arena arena;
 	Window* window;
@@ -176,10 +175,24 @@ uint32_t compute_edit_distance(const std::wstring_view& string, const std::wstri
 	return dp[string.size()][pattern.size()];
 }
 
+// FIXME: Don't hardcode uppercase ranges
 inline wchar_t to_lower_case(wchar_t c) {
 	if (c >= L'A' && c <= 'Z') {
 		return c - L'A' + 'a';
 	}
+	
+	if (c == L'І') {
+		return L'і';
+	}
+
+	if (c == L'Ї') {
+		return L'ї';
+	}
+
+	if (c >= L'А' && c <= L'Я') {
+		return c - L'А' + L'а';
+	}
+
 	return c;
 }
 
@@ -648,6 +661,11 @@ void enable_app() {
 
 // Waits for the hook to notify about the activation
 void wait_for_activation() {
+	if (!s_app.use_keyboard_hook) {
+		s_app.state = AppState::Running;
+		return;
+	}
+
 	// Can happen that the hook notifies before this function is called
 	bool is_already_active = s_app.is_active.load(std::memory_order::relaxed);
 	if (is_already_active) {
@@ -663,6 +681,11 @@ void wait_for_activation() {
 }
 
 void enter_sleep_mode() {
+	if (!s_app.use_keyboard_hook) {
+		window_close(*s_app.window);
+		return;
+	}
+
 	log_info("entering sleep mode");
 	s_app.is_active.store(false, std::memory_order::acquire);
 	wait_for_activation();
@@ -917,6 +940,8 @@ void run_app_frame() {
 
 int main()
 {
+	// TODO: Add a cmd arg to disable (or enable) a keyboard hook
+	s_app.use_keyboard_hook = false;
 	query_system_memory_spec();
 
 	s_app.arena = {};
@@ -929,7 +954,9 @@ int main()
 
 	initialize_platform();
 
-	init_keyboard_hook(s_app.arena);
+	if (s_app.use_keyboard_hook) {
+		init_keyboard_hook(s_app.arena);
+	}
 
 	initialize_app();
 	initialize_search_entries();
@@ -972,7 +999,9 @@ int main()
 
 	log_info("terminated");
 
-	shutdown_keyboard_hook();
+	if (s_app.use_keyboard_hook) {
+		shutdown_keyboard_hook();
+	}
 
 	delete_texture(s_app.app_icon_storage.texture);
 	delete_texture(s_app.icons.texture);

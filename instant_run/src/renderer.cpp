@@ -547,12 +547,14 @@ void end_frame() {
 		glUniform1i(location, 0);
 	}
 
-	glNamedBufferData(s_state.vertex_buffer_id,
+	glBindBuffer(GL_ARRAY_BUFFER, s_state.vertex_buffer_id);
+	glBufferData(GL_ARRAY_BUFFER,
 			sizeof(QuadVertex) * s_state.vertices.size(),
 			s_state.vertices.data(),
 			GL_DYNAMIC_DRAW);
 
-	glNamedBufferData(s_state.index_buffer_id,
+	glBindBuffer(GL_ARRAY_BUFFER, s_state.index_buffer_id);
+	glBufferData(GL_ARRAY_BUFFER,
 			sizeof(uint32_t) * s_state.indices.size(),
 			s_state.indices.data(),
 			GL_DYNAMIC_DRAW);
@@ -714,7 +716,7 @@ void draw_rounded_rect(const Rect& rect, Color color, float corner_radius) {
 
 	// bottom left
 	for (size_t i = 0; i < ROUNDED_CORNER_VERTEX_COUNT; i++) {
-		Vec2 offset = s_state.rounded_corner_vertices[ROUNDED_CORNER_VERTEX_COUNT - i -1] * corner_radius;
+		Vec2 offset = s_state.rounded_corner_vertices[ROUNDED_CORNER_VERTEX_COUNT - i - 1] * corner_radius;
 		offset.x = -offset.x;
 		s_state.vertices.push_back(QuadVertex { bottom_left_origin + offset, Vec2{}, color32 });
 	}
@@ -751,6 +753,7 @@ void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color co
 	}
 
 	push_texture(font.atlas);
+	DrawCommand& command = s_state.commands.back();
 
 	float scale = stbtt_ScaleForPixelHeight(&font.info, font.size);
 
@@ -806,7 +809,6 @@ void draw_text(std::wstring_view text, Vec2 position, const Font& font, Color co
 		s_state.indices.push_back(vertex_offset + 2);
 		s_state.indices.push_back(vertex_offset + 3);
 
-		DrawCommand& command = s_state.commands.back();
 		command.index_count += 6;
 	}
 }

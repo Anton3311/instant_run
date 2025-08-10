@@ -699,21 +699,12 @@ std::vector<std::filesystem::path> get_user_folders(UserFolderKind kind) {
 	return results;
 }
 
-Bitmap get_file_icon(const std::filesystem::path& path, Arena& arena) {
+static Bitmap extract_icon_bitmap(HICON icon, Arena& arena) {
 	PROFILE_FUNCTION();
-	if (!std::filesystem::exists(path)) {
-		return {};
-	}
-
-	HICON small_icon{};
-
-	UINT icon_count = ExtractIconExW(path.wstring().c_str(), 0, &small_icon, nullptr, 1);
-	if (icon_count != 1) {
-		return {};
-	}
 
 	ICONINFO icon_info{};
-	if (!GetIconInfo(small_icon, &icon_info)) {
+	if (!GetIconInfo(icon, &icon_info)) {
+		platform_log_error_message();
 		return {};
 	}
 
@@ -759,6 +750,32 @@ Bitmap get_file_icon(const std::filesystem::path& path, Arena& arena) {
 	b.pixels = pixels;
 
 	return b;
+}
+
+static Bitmap extract_file_icon(const wchar_t* path, Arena& arena) {
+	PROFILE_FUNCTION();
+
+	SHFILEINFO file_info{};
+	DWORD_PTR result = SHGetFileInfoW(path, 0, &file_info, sizeof(file_info), SHGFI_ICON);
+	if (result == 0) {
+		platform_log_error_message();
+		return Bitmap{};
+	}
+
+	Bitmap bitmap = extract_icon_bitmap(file_info.hIcon, arena);
+
+	DestroyIcon(file_info.hIcon);
+
+	return bitmap;
+}
+
+Bitmap get_file_icon(const std::filesystem::path& path, Arena& arena) {
+	PROFILE_FUNCTION();
+	if (!std::filesystem::exists(path)) {
+		return {};
+	}
+
+	return extract_file_icon(path.c_str(), arena);
 }
 
 std::filesystem::path read_symlink_path(const std::filesystem::path& path) {

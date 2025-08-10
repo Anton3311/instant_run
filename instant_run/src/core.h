@@ -248,6 +248,13 @@ inline T* arena_alloc_array(Arena& arena, size_t count) {
 	return reinterpret_cast<T*>(arena_alloc_aligned(arena, sizeof(T) * count, alignof(T)));
 }
 
+inline std::wstring_view arena_push_string(Arena& arena, std::wstring_view string) {
+	wchar_t* copy = arena_alloc_array<wchar_t>(arena, string.length());
+	std::memcpy(copy, string.data(), sizeof(wchar_t) * string.length());
+
+	return std::wstring_view(copy, string.length());
+}
+
 void arena_release(Arena& arena);
 
 struct ArenaSavePoint {

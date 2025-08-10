@@ -769,6 +769,50 @@ static Bitmap extract_file_icon(const wchar_t* path, Arena& arena) {
 	return bitmap;
 }
 
+SystemIconHandle fs_query_file_icon(const std::filesystem::path& path) {
+	PROFILE_FUNCTION();
+
+	if (!std::filesystem::exists(path)) {
+		return nullptr;
+	}
+
+	SHFILEINFO file_info{};
+	DWORD_PTR result = SHGetFileInfoW(path.c_str(), 0, &file_info, sizeof(file_info), SHGFI_ICON);
+	if (result == 0) {
+		platform_log_error_message();
+		return nullptr;
+	}
+
+	return file_info.hIcon;
+}
+
+uint32_t fs_query_file_icon_id(const std::filesystem::path& path) {
+	PROFILE_FUNCTION();
+
+	if (!std::filesystem::exists(path)) {
+		return INVALID_ICON_ID;
+	}
+
+	SHFILEINFO file_info{};
+	DWORD_PTR result = SHGetFileInfoW(path.c_str(), 0, &file_info, sizeof(file_info), SHGFI_SYSICONINDEX);
+	if (result == 0) {
+		platform_log_error_message();
+		return INVALID_ICON_ID;
+	}
+
+	return (uint32_t)file_info.iIcon;
+}
+
+void fs_release_file_icon(SystemIconHandle icon) {
+	PROFILE_FUNCTION();
+	DestroyIcon((HICON)icon);
+}
+
+Bitmap fs_extract_icon_bitmap(SystemIconHandle icon, Arena& bitmap_allocator) {
+	PROFILE_FUNCTION();
+	return extract_icon_bitmap((HICON)icon, bitmap_allocator);
+}
+
 Bitmap get_file_icon(const std::filesystem::path& path, Arena& arena) {
 	PROFILE_FUNCTION();
 	if (!std::filesystem::exists(path)) {

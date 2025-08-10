@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include <unordered_map>
+#include <iostream>
 
 static constexpr UVec2 INVALID_ICON_POSITION = UVec2 { UINT32_MAX, UINT32_MAX };
 
@@ -17,6 +19,8 @@ struct ApplicationIconsStorage {
 	uint32_t icon_size;
 	uint32_t write_offset;
 	uint32_t grid_size;
+
+	std::unordered_map<size_t, UVec2> ext_to_icon;
 };
 
 struct Icons {
@@ -640,13 +644,29 @@ void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage
 			}
 		}
 
-		ArenaSavePoint temp_region = arena_begin_temp(arena);
-		Bitmap bitmap = get_file_icon(is_shortcut ? resolved_path : entry.path, arena);
-		if (bitmap.pixels) {
-			entry.icon = store_app_icon(app_icon_storage, bitmap.pixels);
-		}
+		std::filesystem::path& entry_path = is_shortcut ? resolved_path : entry.path;
 
-		arena_end_temp(temp_region);
+		uint32_t icon_id = fs_query_file_icon_id(entry_path);
+
+		auto it = app_icon_storage.ext_to_icon.find(icon_id);
+		if (it == app_icon_storage.ext_to_icon.end()) {
+			ArenaSavePoint temp_region = arena_begin_temp(arena);
+
+			SystemIconHandle icon_handle = fs_query_file_icon(entry_path);
+
+			Bitmap bitmap = fs_extract_icon_bitmap(icon_handle, arena);
+			if (bitmap.pixels) {
+				UVec2 icon = store_app_icon(app_icon_storage, bitmap.pixels);
+				app_icon_storage.ext_to_icon.emplace(icon_id, icon);
+				entry.icon = icon;
+			}
+
+			fs_release_file_icon(icon_handle);
+
+			arena_end_temp(temp_region);
+		} else {
+			entry.icon = it->second;
+		}
 	}
 }
 

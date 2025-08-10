@@ -140,6 +140,15 @@ struct Bitmap {
 	uint32_t* pixels;
 };
 
+typedef void* SystemIconHandle;
+
+static constexpr uint32_t INVALID_ICON_ID = UINT32_MAX;
+
+SystemIconHandle fs_query_file_icon(const std::filesystem::path& path);
+uint32_t fs_query_file_icon_id(const std::filesystem::path& path);
+void fs_release_file_icon(SystemIconHandle icon);
+Bitmap fs_extract_icon_bitmap(SystemIconHandle icon, Arena& bitmap_allocator);
+
 Bitmap get_file_icon(const std::filesystem::path& path, Arena& arena);
 std::filesystem::path read_symlink_path(const std::filesystem::path& path);
 std::filesystem::path read_shortcut_path(const std::filesystem::path& path);

@@ -697,24 +697,27 @@ void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage
 		uint32_t icon_id = fs_query_file_icon_id(entry_path);
 
 		auto it = app_icon_storage.ext_to_icon.find(icon_id);
-		if (it == app_icon_storage.ext_to_icon.end()) {
-			ArenaSavePoint temp_region = arena_begin_temp(arena);
-
-			SystemIconHandle icon_handle = fs_query_file_icon(entry_path);
-
-			Bitmap bitmap = fs_extract_icon_bitmap(icon_handle, arena);
-			if (bitmap.pixels) {
-				UVec2 icon = store_app_icon(app_icon_storage, bitmap.pixels);
-				app_icon_storage.ext_to_icon.emplace(icon_id, icon);
-				entry.icon = icon;
-			}
-
-			fs_release_file_icon(icon_handle);
-
-			arena_end_temp(temp_region);
-		} else {
+		if (it != app_icon_storage.ext_to_icon.end()) {
 			entry.icon = it->second;
+			continue;
 		}
+
+		SystemIconHandle icon_handle = fs_query_file_icon(entry_path);
+		if (!icon_handle) {
+			continue;
+		}
+
+		ArenaSavePoint temp_region = arena_begin_temp(arena);
+		Bitmap bitmap = fs_extract_icon_bitmap(icon_handle, arena);
+		if (bitmap.pixels) {
+			UVec2 icon = store_app_icon(app_icon_storage, bitmap.pixels);
+			app_icon_storage.ext_to_icon.emplace(icon_id, icon);
+			entry.icon = icon;
+		}
+
+		fs_release_file_icon(icon_handle);
+
+		arena_end_temp(temp_region);
 	}
 }
 
@@ -838,7 +841,7 @@ void initialize_app() {
 	s_app.wait_for_window_events = false;
 }
 
-void initialize_search_entries() {
+void initialize_search_entries(Arena& arena) {
 	PROFILE_FUNCTION();
 
 	std::vector<std::filesystem::path> known_folders = get_user_folders(
@@ -850,6 +853,15 @@ void initialize_search_entries() {
 		} catch (std::exception e) {
 		}
 	}
+
+	ArenaSavePoint temp = arena_begin_temp(arena);
+	StringBuilder builder = { &arena };
+	str_builder_append(builder, "loaded ");
+	str_builder_append(builder, std::to_string(s_app.entries.size()));
+	str_builder_append(builder, " files");
+
+	log_info(std::string_view(builder.string, builder.length));
+	arena_end_temp(temp);
 
 	load_application_icons(s_app.entries, s_app.app_icon_storage, s_app.arena);
 }
@@ -1031,7 +1043,7 @@ int main (int argc, char *argv[]) {
 	}
 
 	initialize_app();
-	initialize_search_entries();
+	initialize_search_entries(s_app.arena);
 
 	clear_search_result();
 

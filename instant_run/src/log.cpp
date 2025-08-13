@@ -79,11 +79,12 @@ inline void log_message(std::string_view message, MessageType message_type) {
 	}
 
 	str_builder_append(builder, message);
+	str_builder_append(builder, "\n");
 
 	fwrite(builder.string, sizeof(*builder.string), builder.length, s_logger.file);
 
 	if (s_logger.output_to_stdout) {
-		std::cout << std::string_view(builder.string, builder.length) << '\n';
+		std::cout << std::string_view(builder.string, builder.length);
 	}
 
 	arena_end_temp(temp);

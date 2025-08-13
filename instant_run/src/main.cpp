@@ -292,7 +292,7 @@ uint32_t compute_longest_common_subsequence(
 				LCSCell& horizontal = cells[y * grid_width + x - 1];
 				LCSCell& vertical = cells[(y - 1) * grid_width + x];
 
-				if (horizontal.value > vertical.value) {
+				if (horizontal.value >= vertical.value) {
 					current_cell = LCSCell {
 						.value = horizontal.value,
 						.direction = LCSDirection::Horizontal
@@ -384,6 +384,50 @@ uint32_t compute_longest_common_subsequence(
 	return (uint32_t)similarity_score << 16 | (uint32_t)longest_substr_score;
 }
 
+uint32_t compute_search_score(std::wstring_view string,
+		std::wstring_view pattern,
+		std::vector<RangeU32>& sequence_ranges,
+		RangeU32& highlight_range) {
+	PROFILE_FUNCTION();
+
+	highlight_range.start = static_cast<uint32_t>(sequence_ranges.size());
+
+	size_t pattern_index = 0;
+
+	size_t matches = 0;
+	size_t max_substring_length = 0;
+	size_t substring_length = 0;
+	size_t substring_start = 0;
+
+	for (size_t i = 0; i < string.length() && pattern_index < pattern.length(); i++) {
+		if (substring_length == 0) {
+			substring_start = i;
+		}
+
+		if (to_lower_case(string[i]) == to_lower_case(pattern[pattern_index])) {
+			pattern_index += 1;
+			substring_length += 1;
+			matches += 1;
+		} else {
+			if (substring_length != 0) {
+				highlight_range.count += 1;
+				sequence_ranges.push_back(RangeU32 { (uint32_t)substring_start, (uint32_t)substring_length });
+			}
+
+			max_substring_length = max(max_substring_length, substring_length);
+			substring_length = 0;
+		}
+	}
+
+	if (substring_length != 0) {
+		highlight_range.count += 1;
+		sequence_ranges.push_back(RangeU32 { (uint32_t)substring_start, (uint32_t)substring_length });
+	}
+
+	max_substring_length = max(max_substring_length, substring_length);
+	return matches + max_substring_length;
+}
+
 void update_search_result(std::wstring_view search_pattern,
 		const std::vector<Entry>& entries,
 		std::vector<ResultEntry>& result,
@@ -399,12 +443,16 @@ void update_search_result(std::wstring_view search_pattern,
 
 		RangeU32 highlight_range{};
 
+#if 0
 		uint32_t score = compute_longest_common_subsequence(
 				entry.name,
 				search_pattern,
 				sequence_ranges,
 				highlight_range,
 				arena);
+#endif
+
+		uint32_t score = compute_search_score(entry.name, search_pattern, sequence_ranges, highlight_range);
 
 		result.push_back({ (uint32_t)i, score, highlight_range });
 	}

@@ -152,12 +152,16 @@ void add_item(Vec2 size) {
 	// Clamp the item rect to the `max_content_bounds`
 	Rect padded_item_rect = Rect {
 		max(item_rect.min, max_content_bounds.min),
-			min(item_rect.max, max_content_bounds.max)
+		min(item_rect.max, max_content_bounds.max)
 	};
 
 	padded_item_rect.max += layout.config.padding;
 
 	layout.bounds = combine_rects(layout.bounds, padded_item_rect);
+
+	if (s_ui_state.options.debug_item_bounds) {
+		draw_rect_lines(s_ui_state.last_item.bounds, Color { 0, 128, 0, 255 });
+	}
 }
 
 bool is_item_hovered() {
@@ -605,13 +609,8 @@ static void pop_layout() {
 	if (s_ui_state.options.debug_layout) {
 		draw_rect_lines(current_layout_bounds, Color { 255, 0, 255, 255 });
 
-		draw_rect_lines(current_layout_bounds, Color { 255, 0, 255, 255 });
-
 		if (prev_layout_config.padding != Vec2{}) {
-			Rect inner_rect = current_layout_bounds;
-			inner_rect.min += prev_layout_config.padding;
-			inner_rect.max -= prev_layout_config.padding;
-			draw_rect_lines(inner_rect, Color { 128, 0, 128, 255 });
+			draw_rect_lines(s_ui_state.layout.content_bounds, Color { 0, 128, 0, 255 });
 		}
 	}
 }
@@ -660,10 +659,14 @@ void begin_horizontal_layout(const LayoutConfig* config, const float* prefered_h
 	Rect bounds = Rect{ cursor, cursor + config->padding * 2.0f };
 
 	if (prefered_height != nullptr) {
-		content_bounds.max.y = content_bounds.min.y + *prefered_height - config->padding.y;
-		
-		// NOTE: padding is already included once in the bounds.min
-		bounds.max.y = bounds.min.y + *prefered_height + config->padding.y;
+		bounds.min = cursor;
+		bounds.max.x = cursor.x;
+		bounds.max.y = cursor.y + *prefered_height;
+
+		// Here might occur an overflow of the parent layout,
+		// when `prefered_height + config->padding.y * 2.0f` doesn't fit in the `max_content_bounds` of the parent
+		content_bounds.min.y = bounds.min.y + config->padding.y;
+		content_bounds.max.y = bounds.max.y - config->padding.y;
 	}
 
 	s_ui_state.layout_stack.push_back(s_ui_state.layout);

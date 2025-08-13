@@ -14,6 +14,7 @@ namespace ui {
 struct Options {
 	bool debug_layout;
 	bool debug_layout_overflow;
+	bool debug_item_bounds;
 };
 
 enum class SizeConstraint {
@@ -149,6 +150,7 @@ void set_layout_item_spacing(float item_spacing);
 void begin_vertical_layout(const LayoutConfig* config = nullptr);
 void end_vertical_layout();
 
+// `prefered_height` includes padding, the actual max content bounds will have height - padding.y * 2.0f
 void begin_horizontal_layout(const LayoutConfig* config = nullptr, const float* prefered_height = nullptr);
 void begin_fixed_horizontal_layout(Vec2 prefered_size, const LayoutConfig* config);
 void end_horizontal_layout();

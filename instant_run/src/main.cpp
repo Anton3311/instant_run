@@ -442,16 +442,6 @@ void update_search_result(std::wstring_view search_pattern,
 		const Entry& entry = entries[i];
 
 		RangeU32 highlight_range{};
-
-#if 0
-		uint32_t score = compute_longest_common_subsequence(
-				entry.name,
-				search_pattern,
-				sequence_ranges,
-				highlight_range,
-				arena);
-#endif
-
 		uint32_t score = compute_search_score(entry.name, search_pattern, sequence_ranges, highlight_range);
 
 		result.push_back({ (uint32_t)i, score, highlight_range });
@@ -525,7 +515,9 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	const ui::Theme& theme = ui::get_theme();
 
 	const float item_height = compute_result_entry_height();
-	ui::begin_horizontal_layout(nullptr, &item_height);
+	ui::LayoutConfig entry_layout_config = theme.default_layout_config;
+	entry_layout_config.padding = theme.frame_padding;
+	ui::begin_horizontal_layout(&entry_layout_config, &item_height);
 
 	Rect item_bounds = ui::get_max_layout_bounds();
 
@@ -896,6 +888,7 @@ void run_app_frame() {
 					break;
 				case KeyCode::F3:
 					options.debug_layout = !options.debug_layout;
+					options.debug_item_bounds = !options.debug_item_bounds;
 					break;
 				default:
 					process_result_view_key_event(s_app.result_view_state, key_event.code);
@@ -961,7 +954,7 @@ void run_app_frame() {
 	float item_spacing = theme.default_layout_config.item_spacing;
 
 	float item_count = (available_height + item_spacing) / (item_height + item_spacing);
-	s_app.result_view_state.fully_visible_item_count = std::floor(item_count);
+	s_app.result_view_state.fully_visible_item_count = (uint32_t)std::ceil(item_count);
 	uint32_t partially_visible_item_count = (uint32_t)std::ceil(item_count);
 
 	update_result_view_scroll(s_app.result_view_state);

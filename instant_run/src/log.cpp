@@ -49,15 +49,14 @@ void log_shutdown_thread() {
 	t_logger_thread = {};
 }
 
-enum class MessageType {
-	Info,
-	Error,
-	Warn,
-};
-
-inline void log_message(std::string_view message, MessageType message_type) {
+void log_message(std::string_view message, MessageType message_type) {
+	PROFILE_FUNCTION();
 	if (s_logger.file == nullptr && !s_logger.output_to_stdout) {
 		return;
+	}
+
+	if (message.data()[message.length() - 1] == '\n') {
+		message = message.substr(0, message.length() - 1);
 	}
 
 	ArenaSavePoint temp = arena_begin_temp(*t_logger_thread.arena);
@@ -90,10 +89,3 @@ inline void log_message(std::string_view message, MessageType message_type) {
 	arena_end_temp(temp);
 }
 
-void log_info(std::string_view message) {
-	log_message(message, MessageType::Info);
-}
-
-void log_error(std::string_view message) {
-
-}

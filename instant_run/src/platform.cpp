@@ -74,19 +74,20 @@ void platform_log_error_message() {
 
 	DWORD error_code = GetLastError();
 
-	wchar_t* message = nullptr;
-
-	size_t message_length = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER
+	char* message = nullptr;
+	size_t message_length = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER
 			| FORMAT_MESSAGE_FROM_SYSTEM
 			| FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL,
 			error_code,
 			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			(LPWSTR)&message,
+			(LPSTR)&message,
 			0,
 			NULL);
 
-	std::wcout << message;
+	log_error(std::string_view(message, message_length));
+
+	LocalFree(message);
 }
 
 ModuleHandle platform_load_library(const char* path) {

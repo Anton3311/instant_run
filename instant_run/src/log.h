@@ -7,6 +7,8 @@ struct Arena;
 bool log_init(const char* log_file_path, bool output_to_stdout);
 bool log_init_thread(Arena& arena, std::string_view thread_name);
 
+Arena& log_get_fmt_arena();
+
 void log_shutdown();
 void log_shutdown_thread();
 

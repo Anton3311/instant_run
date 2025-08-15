@@ -139,6 +139,29 @@ constexpr size_t kb_to_bytes(size_t kb) { return kb * 1024; }
 constexpr size_t mb_to_bytes(size_t mb) { return kb_to_bytes(mb * 1024); }
 
 //
+// String
+//
+
+inline size_t wstr_length(const wchar_t* string) {
+	const wchar_t* iterator = string;
+	while (*iterator != 0) {
+		++iterator;
+	}
+	
+	return iterator - string;
+}
+
+inline const wchar_t* wstr_duplicate(const wchar_t* string, Arena& allocator) {
+	size_t length = wstr_length(string);
+	wchar_t* new_string = arena_alloc_array<wchar_t>(allocator, length + 1);
+
+	memcpy(new_string, string, length * sizeof(*string));
+
+	new_string[length] = 0;
+	return new_string;
+}
+
+//
 // String Builder
 //
 

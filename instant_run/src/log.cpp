@@ -39,6 +39,10 @@ bool log_init_thread(Arena& arena, std::string_view thread_name) {
 	return true;
 }
 
+Arena& log_get_fmt_arena() {
+	return *t_logger_thread.arena;
+}
+
 void log_shutdown() {
 	if (s_logger.file) {
 		fclose(s_logger.file);

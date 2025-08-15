@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "core.h"
+#include "math.h"
 
 //
 // Window
@@ -133,6 +134,7 @@ enum class UserFolderKind {
 IMPL_ENUM_FLAGS(UserFolderKind);
 
 std::vector<std::filesystem::path> get_user_folders(UserFolderKind folders);
+std::vector<std::filesystem::path> fs_query_installed_apps();
 
 struct Bitmap {
 	uint32_t width;

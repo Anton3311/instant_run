@@ -1,6 +1,8 @@
 #pragma once
 
 #include "core.h"
+#include "math.h"
+#include "color.h"
 
 #include <string_view>
 #include <filesystem>

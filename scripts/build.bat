@@ -10,7 +10,7 @@ if [%1] == [release] (
 	set CMD_ARGS=%CMD_ARGS% -O3 -DWINDOWS_SUBSYSTEM
 	set BIN_DIR=bin\release_%PLATFORM%_%ARCH%
 
-	:: BIN_INT_DIR is for precompiled libs, they are the same for dist and release, because they don't use tracy.
+	:: BIN_INT_DIR is for precompiled libs, they are the same for 'release' and 'profiling', because they don't use tracy.
 	set BIN_INT_DIR=bin_int\release_%PLATFORM%_%ARCH%
 ) else if [%1] == [profiling] (
 	set CMD_ARGS=%CMD_ARGS% -DTRACY_ENABLE -DENABLE_PROFILING -O3 -g
@@ -39,4 +39,4 @@ clang++ ^
 	%BIN_INT_DIR%\glad.o ^
 	%BIN_INT_DIR%\stb_truetype.o ^
 	%BIN_INT_DIR%\stb_image.o ^
-	-std=c++20 -m64 -lgdi32 -lopengl32 -luser32 -ldwmapi -lshell32 -lole32 -lAdvapi32.lib -DUNICODE -D_UNICODE %CMD_ARGS%
+	-std=c++20 -lgdi32 -lopengl32 -luser32 -ldwmapi -lshell32 -lole32 -loleaut32.lib -lwindowsapp.lib -lAdvapi32.lib -DUNICODE -D_UNICODE %CMD_ARGS%

@@ -16,6 +16,14 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <winrt/Windows.ApplicationModel.h>
+#include <winrt/Windows.Management.Deployment.h>
+#include <winrt/Windows.Storage.h>
+#include <winrt/base.h>
+#include <winrt/Windows.Foundation.Collections.h>
+#include <credentialprovider.h>
+#include <sddl.h>
+
 #define NOMINMAX
 
 struct ShortcutResolverState {
@@ -698,6 +706,75 @@ std::vector<std::filesystem::path> get_user_folders(UserFolderKind kind) {
 	}
 
 	return results;
+}
+
+// Thanks to https://github.com/christophpurrer/cppwinrt-clang/blob/master/build.bat
+std::vector<std::filesystem::path> fs_query_installed_apps() {
+	PROFILE_FUNCTION();
+
+	using namespace winrt;
+	using namespace Windows::ApplicationModel;
+	using namespace Windows::Management::Deployment;
+	using namespace Windows::Storage;
+	using namespace Windows::Foundation::Collections;
+
+	HANDLE token{};
+	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+		platform_log_error_message();
+		return {};
+	}
+
+	DWORD return_length = 0;
+	GetTokenInformation(token, TokenUser, nullptr, 0, &return_length);
+
+	void* token_user_buffer = malloc(return_length);
+	if (!GetTokenInformation(token, TokenUser, token_user_buffer, return_length, &return_length)) {
+		platform_log_error_message();
+		return {};
+	}
+
+	TOKEN_USER* token_user = reinterpret_cast<TOKEN_USER*>(token_user_buffer);
+
+	PSID sid = token_user->User.Sid;
+	LPWSTR sid_string{};
+
+	if (!ConvertSidToStringSidW(sid, &sid_string)) {
+		platform_log_error_message();
+		return {};
+	}
+
+#if 1
+	winrt::hstring sid_hstring(sid_string);
+
+	LocalFree(sid_string);
+
+	try {
+		winrt::init_apartment();
+
+		PackageManager package_manager;
+		auto package_collection = package_manager.FindPackagesForUser(sid_hstring);
+
+		for (const auto& package : package_collection) {
+			winrt::hstring install_path = package.InstalledPath();
+			std::wcout << install_path.c_str() << '\n';
+		}
+
+#if 0
+		std::cout << "Found " << package_count << " packages\n";
+
+		for (uint32_t i = 0; i < package_count; i++) {
+			Package package{};
+			package_collection.GetAt(i, &package);
+		}
+#endif
+	} catch (const winrt::hresult_error& e) {
+		winrt::hstring message = e.message();
+		const wchar_t* message_string = message.c_str();
+		std::wcout << message_string << '\n';
+	}
+#endif
+
+	return {};
 }
 
 static Bitmap extract_icon_bitmap(HICON icon, Arena& arena) {

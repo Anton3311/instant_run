@@ -23,6 +23,8 @@
 #include <winrt/Windows.Foundation.Collections.h>
 #include <credentialprovider.h>
 #include <sddl.h>
+#include <appxpackaging.h>
+#include <shlwapi.h>
 
 #define NOMINMAX
 
@@ -709,7 +711,7 @@ std::vector<std::filesystem::path> get_user_folders(UserFolderKind kind) {
 }
 
 // Thanks to https://github.com/christophpurrer/cppwinrt-clang/blob/master/build.bat
-std::vector<std::filesystem::path> fs_query_installed_apps() {
+std::vector<std::filesystem::path> platform_query_installed_apps(Arena& allocator) {
 	PROFILE_FUNCTION();
 
 	using namespace winrt;
@@ -743,10 +745,24 @@ std::vector<std::filesystem::path> fs_query_installed_apps() {
 		return {};
 	}
 
-#if 1
 	winrt::hstring sid_hstring(sid_string);
 
 	LocalFree(sid_string);
+
+	IAppxFactory* factory = {};
+
+	{
+		HRESULT result = CoCreateInstance(__uuidof(AppxFactory),
+				nullptr,
+				CLSCTX_INPROC_SERVER,
+				__uuidof(IAppxFactory),
+				(LPVOID*)(&factory));
+
+		if (FAILED(result)) {
+			log_error("failed to create 'AppxFactory'");
+			return {};
+		}
+	}
 
 	try {
 		winrt::init_apartment();
@@ -755,24 +771,167 @@ std::vector<std::filesystem::path> fs_query_installed_apps() {
 		auto package_collection = package_manager.FindPackagesForUser(sid_hstring);
 
 		for (const auto& package : package_collection) {
-			winrt::hstring install_path = package.InstalledPath();
-			std::wcout << install_path.c_str() << '\n';
-		}
+			ArenaSavePoint temp = arena_begin_temp(allocator);
 
-#if 0
-		std::cout << "Found " << package_count << " packages\n";
+			std::filesystem::path install_path = package.InstalledPath().c_str();
+			std::filesystem::path manifest_path = install_path / "AppxManifest.xml";
 
-		for (uint32_t i = 0; i < package_count; i++) {
-			Package package{};
-			package_collection.GetAt(i, &package);
+			if (std::filesystem::exists(manifest_path)) {
+				// Based on example from
+				// https://learn.microsoft.com/en-us/windows/win32/appxpkg/how-to-query-package-identity-information
+				IStream* manifest_input_stream = nullptr;
+				HRESULT result = SHCreateStreamOnFileEx(manifest_path.c_str(),
+						STGM_READ | STGM_SHARE_EXCLUSIVE,
+						0, FALSE, nullptr,
+						&manifest_input_stream);
+
+				if (FAILED(result)) {
+					ArenaSavePoint format_temp = arena_begin_temp(allocator);
+					StringBuilder builder = { &allocator };
+					str_builder_append(builder, "failed to create stream for a manifest file: '");
+					str_builder_append(builder, manifest_path.string());
+					str_builder_append(builder, "'");
+
+					log_error(str_builder_to_str(builder));
+
+					arena_end_temp(format_temp);
+					continue;
+				}
+
+				IAppxManifestReader* manifest_reader = nullptr;
+			 	result = factory->CreateManifestReader(manifest_input_stream, &manifest_reader);
+
+				if (FAILED(result)) {
+					ArenaSavePoint format_temp = arena_begin_temp(allocator);
+					StringBuilder builder = { &allocator };
+					str_builder_append(builder, "failed to create 'IAppxManifestReader' for a manifest file: '");
+					str_builder_append(builder, manifest_path.string());
+					str_builder_append(builder, "'");
+
+					log_error(str_builder_to_str(builder));
+
+					arena_end_temp(format_temp);
+
+					manifest_input_stream->Release();
+					continue;
+				}
+
+				IAppxManifestApplicationsEnumerator* apps_enumerator = nullptr;
+				result = manifest_reader->GetApplications(&apps_enumerator);
+				if (FAILED(result)) {
+					ArenaSavePoint format_temp = arena_begin_temp(allocator);
+					StringBuilder builder = { &allocator };
+					str_builder_append(builder, "failed to get 'IAppxManifestApplicationsEnumerator' for a manifest file: '");
+					str_builder_append(builder, manifest_path.string());
+					str_builder_append(builder, "'");
+
+					log_error(str_builder_to_str(builder));
+
+					arena_end_temp(format_temp);
+
+					manifest_input_stream->Release();
+					manifest_reader->Release();
+					continue;
+				}
+
+				BOOL has_current = FALSE;
+				result = apps_enumerator->GetHasCurrent(&has_current);
+				if (FAILED(result)) {
+					ArenaSavePoint format_temp = arena_begin_temp(allocator);
+					StringBuilder builder = { &allocator };
+					str_builder_append(builder, "'IAppxManifestApplicationsEnumerator::GetHasCurrent' failed for a manifest file: '");
+					str_builder_append(builder, manifest_path.string());
+					str_builder_append(builder, "'");
+
+					log_error(str_builder_to_str(builder));
+
+					arena_end_temp(format_temp);
+
+					manifest_input_stream->Release();
+					manifest_reader->Release();
+					continue;
+				}
+
+				bool got_all_apps = true;
+
+				while (has_current) {
+					IAppxManifestApplication* application = nullptr;
+					result = apps_enumerator->GetCurrent(&application);
+
+					if (FAILED(result)) {
+						ArenaSavePoint format_temp = arena_begin_temp(allocator);
+						StringBuilder builder = { &allocator };
+						str_builder_append(builder, "'IAppxManifestApplicationsEnumerator::GetCurrent' failed for a manifest file: '");
+						str_builder_append(builder, manifest_path.string());
+						str_builder_append(builder, "'");
+
+						log_error(str_builder_to_str(builder));
+
+						arena_end_temp(format_temp);
+
+						manifest_input_stream->Release();
+						manifest_reader->Release();
+						got_all_apps = true;
+						break;
+					}
+
+					LPWSTR app_user_model_id = nullptr;
+					result = application->GetAppUserModelId(&app_user_model_id);
+					if (FAILED(result)) {
+						ArenaSavePoint format_temp = arena_begin_temp(allocator);
+						StringBuilder builder = { &allocator };
+						str_builder_append(builder, "'AppxManifestApplication::GetAppUserModelId' failed for a manifest file: '");
+						str_builder_append(builder, manifest_path.string());
+						str_builder_append(builder, "'");
+
+						log_error(str_builder_to_str(builder));
+
+						arena_end_temp(format_temp);
+
+						manifest_input_stream->Release();
+						manifest_reader->Release();
+						got_all_apps = false;
+						break;
+					} else {
+						std::wcout << app_user_model_id << '\n';
+					}
+
+					CoTaskMemFree(app_user_model_id);
+
+					result = apps_enumerator->MoveNext(&has_current);
+					if (FAILED(result)) {
+						ArenaSavePoint format_temp = arena_begin_temp(allocator);
+						StringBuilder builder = { &allocator };
+						str_builder_append(builder, "'IAppxManifestApplicationsEnumerator::MoveNext' failed for a manifest file: '");
+						str_builder_append(builder, manifest_path.string());
+						str_builder_append(builder, "'");
+
+						log_error(str_builder_to_str(builder));
+
+						arena_end_temp(format_temp);
+
+						manifest_input_stream->Release();
+						manifest_reader->Release();
+						got_all_apps = false;
+						break;
+					}
+				}
+
+				if (got_all_apps) {
+					manifest_input_stream->Release();
+					manifest_reader->Release();
+				}
+			}
+
+			arena_end_temp(temp);
 		}
-#endif
 	} catch (const winrt::hresult_error& e) {
 		winrt::hstring message = e.message();
 		const wchar_t* message_string = message.c_str();
 		std::wcout << message_string << '\n';
 	}
-#endif
+
+	factory->Release();
 
 	return {};
 }

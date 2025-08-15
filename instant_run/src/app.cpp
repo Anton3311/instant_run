@@ -1033,7 +1033,7 @@ int run_app(CommandLineArgs cmd_args) {
 
 	initialize_platform();
 
-	fs_query_installed_apps();
+	platform_query_installed_apps(s_app.arena);
 
 	if (s_app.use_keyboard_hook) {
 		init_keyboard_hook(s_app.arena);

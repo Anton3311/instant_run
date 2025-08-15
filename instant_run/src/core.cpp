@@ -94,3 +94,29 @@ void arena_release(Arena& arena) {
 	arena.commited = 0;
 }
 
+//
+// File IO
+//
+
+Span<uint8_t> file_read_all_bytes(const char* path, Arena& arena) {
+	PROFILE_FUNCTION();
+
+	FILE* f = NULL;
+	errno_t error = fopen_s(&f, path, "r");
+
+	if (!f || error == EINVAL) {
+		// Failed to read
+		return Span<uint8_t>();
+	}
+
+	fseek(f, 0, SEEK_END);
+	size_t size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+
+	void* file_data = arena_alloc_aligned(arena, size, 16);
+	fread(file_data, size, 1, f);
+
+	fclose(f);
+
+	return Span<uint8_t>((uint8_t*)file_data, size);
+}

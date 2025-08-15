@@ -134,7 +134,7 @@ enum class UserFolderKind {
 IMPL_ENUM_FLAGS(UserFolderKind);
 
 std::vector<std::filesystem::path> get_user_folders(UserFolderKind folders);
-std::vector<std::filesystem::path> fs_query_installed_apps();
+std::vector<std::filesystem::path> platform_query_installed_apps(Arena& allocator);
 
 struct Bitmap {
 	uint32_t width;

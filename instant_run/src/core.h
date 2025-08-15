@@ -159,3 +159,12 @@ inline void str_builder_append(StringBuilder& builder, std::string_view string) 
 	}
 }
 
+inline std::string_view str_builder_to_str(const StringBuilder& builder) {
+	return std::string_view(builder.string, builder.length);
+}
+
+//
+// File IO
+//
+
+Span<uint8_t> file_read_all_bytes(const char* path, Arena& allocator);

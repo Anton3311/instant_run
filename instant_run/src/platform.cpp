@@ -828,12 +828,17 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 	std::vector<InstalledAppDesc> app_ids;
 
 	try {
-		winrt::init_apartment();
+		PROFILE_SCOPE("query_packages");
+		{
+			PROFILE_SCOPE("init_winrt");
+			winrt::init_apartment();
+		}
 
 		PackageManager package_manager;
 		auto package_collection = package_manager.FindPackagesForUser(sid_hstring);
 
 		for (const auto& package : package_collection) {
+			PROFILE_SCOPE("process_package");
 
 			std::filesystem::path install_path = package.InstalledPath().c_str();
 			std::filesystem::path manifest_path = install_path / "AppxManifest.xml";
@@ -846,19 +851,27 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 
 			// Based on example from
 			// https://learn.microsoft.com/en-us/windows/win32/appxpkg/how-to-query-package-identity-information
-			HRESULT result = SHCreateStreamOnFileEx(manifest_path.c_str(),
-					STGM_READ | STGM_SHARE_EXCLUSIVE,
-					0, FALSE, nullptr,
-					&manifest_state.manifest_input_stream);
+			HRESULT result = {};
+
+			{
+				PROFILE_SCOPE("create_file_stream");
+				result = SHCreateStreamOnFileEx(manifest_path.c_str(),
+						STGM_READ | STGM_SHARE_EXCLUSIVE,
+						0, FALSE, nullptr,
+						&manifest_state.manifest_input_stream);
+			}
 
 			if (FAILED(result)) {
 				log_installed_apps_query_error("failed to create stream", manifest_path);
 				continue;
 			}
 
-			result = factory->CreateManifestReader(
-					manifest_state.manifest_input_stream,
-					&manifest_state.manifest_reader);
+			{
+				PROFILE_SCOPE("create_manifest_reader");
+				result = factory->CreateManifestReader(
+						manifest_state.manifest_input_stream,
+						&manifest_state.manifest_reader);
+			}
 
 			if (FAILED(result)) {
 				log_installed_apps_query_error("failed to create 'IAppxManifestReader'", manifest_path);
@@ -866,7 +879,11 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 				continue;
 			}
 
-			result = manifest_state.manifest_reader->GetApplications(&manifest_state.apps_enumerator);
+			{
+				PROFILE_SCOPE("get_applications_from_manifest");
+				result = manifest_state.manifest_reader->GetApplications(&manifest_state.apps_enumerator);
+			}
+
 			if (FAILED(result)) {
 				log_installed_apps_query_error("failed to get 'IAppxManifestApplicationsEnumerator'", manifest_path);
 				app_manifest_query_state_release(manifest_state);
@@ -900,6 +917,7 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 					application->Release();
 					break;
 				} else {
+					PROFILE_SCOPE("append_app_desc");
 					InstalledAppDesc& desc = app_ids.emplace_back();
 					desc.id = wstr_duplicate(app_user_model_id, allocator);
 

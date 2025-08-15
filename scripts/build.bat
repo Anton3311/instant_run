@@ -16,7 +16,7 @@ if [%1] == [release] (
 	set CMD_ARGS=%CMD_ARGS% -DTRACY_ENABLE -DENABLE_PROFILING -O3 -g
 	set BIN_DIR=bin\profiling_%PLATFORM%_%ARCH%
 
-	set BIN_INT_DIR=bin_int\profiling_%PLATFORM%_%ARCH%
+	set BIN_INT_DIR=bin_int\release_%PLATFORM%_%ARCH%
 	set FILES=%FILES% vendor\Tracy\TracyClient.cpp
 ) else (
 	set CMD_ARGS=%CMD_ARGS% -g

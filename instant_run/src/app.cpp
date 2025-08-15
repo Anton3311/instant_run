@@ -39,6 +39,9 @@ struct Entry {
 	std::wstring name;
 	std::filesystem::path path;
 	UVec2 icon;
+
+	const wchar_t* id;
+	bool is_microsoft_store_app;
 };
 
 struct ResultEntry {
@@ -1033,14 +1036,21 @@ int run_app(CommandLineArgs cmd_args) {
 
 	initialize_platform();
 
- 	std::vector<const wchar_t*> app_ids = platform_query_installed_apps_ids(s_app.arena);
-
 	if (s_app.use_keyboard_hook) {
 		init_keyboard_hook(s_app.arena);
 	}
 
 	initialize_app();
 	initialize_search_entries(s_app.arena);
+
+ 	std::vector<InstalledAppDesc> installed_apps = platform_query_installed_apps_ids(s_app.arena);
+	for (const auto& app_desc : installed_apps) {
+		Entry& entry = s_app.entries.emplace_back();
+		entry.name = app_desc.display_name;
+		entry.is_microsoft_store_app = true;
+		entry.icon = INVALID_ICON_POSITION;
+		entry.id = app_desc.id;
+	}
 
 	clear_search_result();
 

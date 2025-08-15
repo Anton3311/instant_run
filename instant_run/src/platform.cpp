@@ -795,7 +795,7 @@ static bool query_user_sid_string(Arena& allocator, winrt::hstring* out_result) 
 }
 
 // Thanks to https://github.com/christophpurrer/cppwinrt-clang/blob/master/build.bat
-std::vector<const wchar_t*> platform_query_installed_apps_ids(Arena& allocator) {
+std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator) {
 	PROFILE_FUNCTION();
 
 	using namespace winrt;
@@ -825,7 +825,7 @@ std::vector<const wchar_t*> platform_query_installed_apps_ids(Arena& allocator) 
 		}
 	}
 
-	std::vector<const wchar_t*> app_ids;
+	std::vector<InstalledAppDesc> app_ids;
 
 	try {
 		winrt::init_apartment();
@@ -900,7 +900,11 @@ std::vector<const wchar_t*> platform_query_installed_apps_ids(Arena& allocator) 
 					application->Release();
 					break;
 				} else {
-					app_ids.push_back(wstr_duplicate(app_user_model_id, allocator));
+					InstalledAppDesc& desc = app_ids.emplace_back();
+					desc.id = wstr_duplicate(app_user_model_id, allocator);
+
+					winrt::hstring display_name = package.DisplayName();
+					desc.display_name = wstr_duplicate(display_name.c_str(), allocator);
 					CoTaskMemFree(app_user_model_id);
 				}
 

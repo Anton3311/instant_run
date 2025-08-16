@@ -143,6 +143,7 @@ struct InstalledAppDesc {
 
 // ids are reperesented as strings, which are allocated in the arena
 std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator);
+bool platform_launch_installed_app(const wchar_t* app_id);
 
 struct Bitmap {
 	uint32_t width;

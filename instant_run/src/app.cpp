@@ -991,14 +991,20 @@ void run_app_frame() {
 		case EntryAction::None:
 			break;
 		case EntryAction::Launch:
-			run_file(entry.path, false);
-			s_app.state = AppState::Sleeping;
-			clear_search_result();
+			if (entry.is_microsoft_store_app) {
+				platform_launch_installed_app(entry.id);
+			} else {
+				run_file(entry.path, false);
+				s_app.state = AppState::Sleeping;
+				clear_search_result();
+			}
 			break;
 		case EntryAction::LaunchAsAdmin:
-			run_file(entry.path, true);
-			s_app.state = AppState::Sleeping;
-			clear_search_result();
+			if (!entry.is_microsoft_store_app) {
+				run_file(entry.path, true);
+				s_app.state = AppState::Sleeping;
+				clear_search_result();
+			}
 			break;
 		case EntryAction::CopyPath:
 			break;

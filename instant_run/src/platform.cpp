@@ -26,6 +26,7 @@
 #include <sddl.h>
 #include <appxpackaging.h>
 #include <shlwapi.h>
+#include <shobjidl_core.h>
 
 #define NOMINMAX
 
@@ -842,18 +843,8 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 		for (const auto& package : package_collection) {
 			PROFILE_SCOPE("process_package");
 
-			std::wstring_view logo_uri;
-			std::wstring_view display_name;
-
-			{
-				PROFILE_SCOPE("get_logo_uri");
-			 	logo_uri = wstr_duplicate(package.Logo().DisplayUri().c_str(), allocator);
-			}
-
-			{
-				winrt::hstring display_name = package.DisplayName();
-				display_name = wstr_duplicate(display_name.c_str(), allocator);
-			}
+			std::wstring_view logo_uri = wstr_duplicate(package.Logo().DisplayUri().c_str(), allocator);
+			std::wstring_view display_name = wstr_duplicate(package.DisplayName().c_str(), allocator);
 
 			std::filesystem::path install_path = package.InstalledPath().c_str();
 			std::filesystem::path manifest_path = install_path / "AppxManifest.xml";
@@ -963,6 +954,33 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 	factory->Release();
 
 	return app_ids;
+}
+
+bool platform_launch_installed_app(const wchar_t* app_id) {
+	PROFILE_FUNCTION();
+
+	IApplicationActivationManager* activation_manager = nullptr;
+	HRESULT result = CoCreateInstance(__uuidof(ApplicationActivationManager),
+			nullptr,
+			CLSCTX_INPROC_SERVER,
+			__uuidof(IApplicationActivationManager),
+			(LPVOID*)(&activation_manager));
+
+	if (FAILED(result)) {
+		log_error("failed to create 'IApplicationActivationManager'");
+		return false;
+	}
+
+	DWORD process_id = 0;
+	result = activation_manager->ActivateApplication(app_id, nullptr, AO_NONE, &process_id);
+	if (FAILED(result)) {
+		log_error("failed to launch installed app");
+		return false;
+	}
+
+	activation_manager->Release();
+
+	return true;
 }
 
 static Bitmap extract_icon_bitmap(HICON icon, Arena& arena) {

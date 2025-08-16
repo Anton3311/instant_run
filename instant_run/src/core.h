@@ -151,14 +151,15 @@ inline size_t wstr_length(const wchar_t* string) {
 	return iterator - string;
 }
 
-inline const wchar_t* wstr_duplicate(const wchar_t* string, Arena& allocator) {
+// create a copy of a string with null-terminator
+inline std::wstring_view wstr_duplicate(const wchar_t* string, Arena& allocator) {
 	size_t length = wstr_length(string);
 	wchar_t* new_string = arena_alloc_array<wchar_t>(allocator, length + 1);
 
 	memcpy(new_string, string, length * sizeof(*string));
 
 	new_string[length] = 0;
-	return new_string;
+	return std::wstring_view(new_string, length);
 }
 
 //

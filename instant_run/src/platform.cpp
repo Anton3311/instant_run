@@ -21,6 +21,7 @@
 #include <winrt/Windows.Storage.h>
 #include <winrt/base.h>
 #include <winrt/Windows.Foundation.Collections.h>
+#include <winrt/Windows.Foundation.h>
 #include <credentialprovider.h>
 #include <sddl.h>
 #include <appxpackaging.h>
@@ -803,6 +804,7 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 	using namespace Windows::Management::Deployment;
 	using namespace Windows::Storage;
 	using namespace Windows::Foundation::Collections;
+	using namespace Windows::Foundation;
 
 	winrt::hstring sid_hstring;
 	if (!query_user_sid_string(allocator, &sid_hstring)) {
@@ -839,6 +841,19 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 
 		for (const auto& package : package_collection) {
 			PROFILE_SCOPE("process_package");
+
+			std::wstring_view logo_uri;
+			std::wstring_view display_name;
+
+			{
+				PROFILE_SCOPE("get_logo_uri");
+			 	logo_uri = wstr_duplicate(package.Logo().DisplayUri().c_str(), allocator);
+			}
+
+			{
+				winrt::hstring display_name = package.DisplayName();
+				display_name = wstr_duplicate(display_name.c_str(), allocator);
+			}
 
 			std::filesystem::path install_path = package.InstalledPath().c_str();
 			std::filesystem::path manifest_path = install_path / "AppxManifest.xml";
@@ -919,10 +934,10 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 				} else {
 					PROFILE_SCOPE("append_app_desc");
 					InstalledAppDesc& desc = app_ids.emplace_back();
-					desc.id = wstr_duplicate(app_user_model_id, allocator);
+					desc.id = wstr_duplicate(app_user_model_id, allocator).data();
+					desc.display_name = display_name;
+					desc.logo_uri = logo_uri;
 
-					winrt::hstring display_name = package.DisplayName();
-					desc.display_name = wstr_duplicate(display_name.c_str(), allocator);
 					CoTaskMemFree(app_user_model_id);
 				}
 

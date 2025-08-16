@@ -137,6 +137,7 @@ std::vector<std::filesystem::path> get_user_folders(UserFolderKind folders);
 
 struct InstalledAppDesc {
 	const wchar_t* id;
+	std::wstring_view logo_uri;
 	std::wstring_view display_name;
 };
 

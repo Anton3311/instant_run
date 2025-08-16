@@ -34,8 +34,7 @@ bool log_init(const char* log_file_path, bool output_to_stdout) {
 
 bool log_init_thread(Arena& arena, std::string_view thread_name) {
 	t_logger_thread.arena = &arena;
-	t_logger_thread.name = thread_name;
-
+	t_logger_thread.name = str_duplicate(thread_name, *t_logger_thread.arena);
 	return true;
 }
 

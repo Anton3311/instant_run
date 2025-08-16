@@ -143,6 +143,7 @@ constexpr size_t mb_to_bytes(size_t mb) { return kb_to_bytes(mb * 1024); }
 //
 
 inline size_t wstr_length(const wchar_t* string) {
+	PROFILE_FUNCTION();
 	const wchar_t* iterator = string;
 	while (*iterator != 0) {
 		++iterator;
@@ -153,6 +154,8 @@ inline size_t wstr_length(const wchar_t* string) {
 
 // create a copy of a string with null-terminator
 inline std::wstring_view wstr_duplicate(const wchar_t* string, Arena& allocator) {
+	PROFILE_FUNCTION();
+
 	size_t length = wstr_length(string);
 	wchar_t* new_string = arena_alloc_array<wchar_t>(allocator, length + 1);
 
@@ -160,6 +163,30 @@ inline std::wstring_view wstr_duplicate(const wchar_t* string, Arena& allocator)
 
 	new_string[length] = 0;
 	return std::wstring_view(new_string, length);
+}
+
+// create a copy of a string with null-terminator
+inline std::string_view str_duplicate(const char* string, Arena& allocator) {
+	PROFILE_FUNCTION();
+
+	size_t length = strlen(string);
+	char* new_string = arena_alloc_array<char>(allocator, length + 1);
+
+	memcpy(new_string, string, length * sizeof(string[0]));
+
+	new_string[length] = 0;
+	return std::string_view(new_string, length);
+}
+
+// create a copy of a string without null-terminator
+inline std::string_view str_duplicate(std::string_view string, Arena& allocator) {
+	PROFILE_FUNCTION();
+
+	size_t length = string.length();
+	char* new_string = arena_alloc_array<char>(allocator, length);
+
+	memcpy(new_string, string.data(), length * sizeof(string[0]));
+	return std::string_view(new_string, length);
 }
 
 //
@@ -177,6 +204,17 @@ inline void str_builder_append(StringBuilder& builder, std::string_view string) 
 	memcpy(buffer, string.data(), sizeof(char) * string.length());
 
 	builder.length += string.length();
+
+	if (!builder.string) {
+		builder.string = buffer;
+	}
+}
+
+inline void str_builder_append(StringBuilder& builder, char c) {
+	char* buffer = arena_alloc_array<char>(*builder.arena, 1);
+	*buffer = c;
+
+	builder.length += 1;
 
 	if (!builder.string) {
 		builder.string = buffer;

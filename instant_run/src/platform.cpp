@@ -2,6 +2,7 @@
 
 #include "hook_config.h"
 #include "log.h"
+#include "job_system.h"
 
 #include <string>
 #include <iostream>
@@ -796,6 +797,169 @@ static bool query_user_sid_string(Arena& allocator, winrt::hstring* out_result) 
 	return true;
 }
 
+struct alignas(64) PackageProcessingTaskContext {
+	Span<IAppxFactory*> factories;
+	Span<winrt::Windows::ApplicationModel::Package> packages;
+	Span<InstalledAppDesc> app_descs;
+	uint32_t max_app_descs;
+};
+
+static IAppxFactory* create_appx_factory() {
+	PROFILE_FUNCTION();
+	IAppxFactory* factory = {};
+
+	HRESULT result = CoCreateInstance(__uuidof(AppxFactory),
+			nullptr,
+			CLSCTX_INPROC_SERVER,
+			__uuidof(IAppxFactory),
+			(LPVOID*)(&factory));
+
+	if (FAILED(result)) {
+		log_error("failed to create 'AppxFactory'");
+		return nullptr;
+	}
+
+	return factory;
+}
+
+static void task_process_package_batch(const JobContext& job_context, void* user_data) {
+	PROFILE_FUNCTION();
+
+	using namespace winrt;
+	using namespace Windows::ApplicationModel;
+	using namespace Windows::Management::Deployment;
+	using namespace Windows::Storage;
+	using namespace Windows::Foundation::Collections;
+	using namespace Windows::Foundation;
+
+	PackageProcessingTaskContext* context = reinterpret_cast<PackageProcessingTaskContext*>(user_data);
+	IAppxFactory* factory = context->factories[job_context.worker_index];
+
+	Arena& allocator = job_context.arena;
+
+	for (const auto& package : context->packages) {
+		std::filesystem::path install_path = package.InstalledPath().c_str();
+		std::filesystem::path manifest_path = install_path / "AppxManifest.xml";
+
+		if (!std::filesystem::exists(manifest_path)) {
+			continue;
+		}
+
+		std::wstring_view logo_uri;
+		std::wstring_view display_name;
+
+		{
+			PROFILE_SCOPE("get_display_name_and_logo_uri");
+			winrt::hstring logo_uri_string = Uri::UnescapeComponent(package.Logo().Path());
+
+			// HACK: After all of the convertions of the URI, it is left with forward slash at the start.
+			//       So get rid of it.
+			logo_uri = wstr_duplicate(logo_uri_string.c_str() + 1, allocator);
+			display_name = wstr_duplicate(package.DisplayName().c_str(), allocator);
+		}
+
+		AppManifestQueryState manifest_state{};
+
+		// Based on example from
+		// https://learn.microsoft.com/en-us/windows/win32/appxpkg/how-to-query-package-identity-information
+		HRESULT result = {};
+
+		{
+			PROFILE_SCOPE("create_file_stream");
+			result = SHCreateStreamOnFileEx(manifest_path.c_str(),
+					STGM_READ | STGM_SHARE_EXCLUSIVE,
+					0, FALSE, nullptr,
+					&manifest_state.manifest_input_stream);
+		}
+
+		if (FAILED(result)) {
+			log_installed_apps_query_error("failed to create stream", manifest_path);
+			continue;
+		}
+
+		{
+			PROFILE_SCOPE("create_manifest_reader");
+			result = factory->CreateManifestReader(
+					manifest_state.manifest_input_stream,
+					&manifest_state.manifest_reader);
+		}
+
+		if (FAILED(result)) {
+			log_installed_apps_query_error("failed to create 'IAppxManifestReader'", manifest_path);
+			app_manifest_query_state_release(manifest_state);
+			continue;
+		}
+
+		{
+			PROFILE_SCOPE("get_applications_from_manifest");
+			result = manifest_state.manifest_reader->GetApplications(&manifest_state.apps_enumerator);
+		}
+
+		if (FAILED(result)) {
+			log_installed_apps_query_error("failed to get 'IAppxManifestApplicationsEnumerator'", manifest_path);
+			app_manifest_query_state_release(manifest_state);
+			continue;
+		}
+
+		BOOL has_current = FALSE;
+		result = manifest_state.apps_enumerator->GetHasCurrent(&has_current);
+		if (FAILED(result)) {
+			log_installed_apps_query_error("'IAppxManifestApplicationsEnumerator::GetHasCurrent' failed", manifest_path);
+			app_manifest_query_state_release(manifest_state);
+			continue;
+		}
+
+		while (has_current) {
+			IAppxManifestApplication* application = nullptr;
+			result = manifest_state.apps_enumerator->GetCurrent(&application);
+
+			if (FAILED(result)) {
+				log_installed_apps_query_error("'IAppxManifestApplicationsEnumerator::GetCurrent' failed", manifest_path);
+				app_manifest_query_state_release(manifest_state);
+				application->Release();
+				break;
+			}
+
+			LPWSTR app_user_model_id = nullptr;
+			result = application->GetAppUserModelId(&app_user_model_id);
+			if (FAILED(result)) {
+				log_installed_apps_query_error("'AppxManifestApplication::GetAppUserModelId' failed", manifest_path);
+				app_manifest_query_state_release(manifest_state);
+				application->Release();
+				break;
+			} else {
+				if (context->app_descs.count >= context->max_app_descs) {
+					log_error("failed to retrieve all of the application entries from the manifest file, because the reserved buffer is full");
+					application->Release();
+					break;
+				}
+
+				PROFILE_SCOPE("append_app_desc");
+				
+				context->app_descs.count += 1;
+				InstalledAppDesc& desc = context->app_descs[context->app_descs.count - 1];
+				desc.id = wstr_duplicate(app_user_model_id, allocator).data();
+				desc.display_name = display_name;
+				desc.logo_uri = logo_uri;
+
+				CoTaskMemFree(app_user_model_id);
+			}
+
+			result = manifest_state.apps_enumerator->MoveNext(&has_current);
+			if (FAILED(result)) {
+				log_installed_apps_query_error("'IAppxManifestApplicationsEnumerator::MoveNext' failed", manifest_path);
+				app_manifest_query_state_release(manifest_state);
+				application->Release();
+				break;
+			}
+
+			application->Release();
+		}
+
+		app_manifest_query_state_release(manifest_state);
+	}
+}
+
 // Thanks to https://github.com/christophpurrer/cppwinrt-clang/blob/master/build.bat
 std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator) {
 	PROFILE_FUNCTION();
@@ -813,21 +977,7 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 		return {};
 	}
 
-	IAppxFactory* factory = {};
-
-	{
-		HRESULT result = CoCreateInstance(__uuidof(AppxFactory),
-				nullptr,
-				CLSCTX_INPROC_SERVER,
-				__uuidof(IAppxFactory),
-				(LPVOID*)(&factory));
-
-		if (FAILED(result)) {
-			log_error("failed to create 'AppxFactory'");
-			return {};
-		}
-	}
-
+	HRESULT result{};
 	std::vector<InstalledAppDesc> app_ids;
 
 	try {
@@ -837,124 +987,78 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 			winrt::init_apartment();
 		}
 
-		PackageManager package_manager;
-		auto package_collection = package_manager.FindPackagesForUser(sid_hstring);
+		uint32_t worker_count = job_system_get_worker_count() + 1; // +1 for the main thread
+		IAppxFactory** factories_per_worker = arena_alloc_array<IAppxFactory*>(allocator, worker_count);
 
-		for (const auto& package : package_collection) {
-			PROFILE_SCOPE("process_package");
+		for (uint32_t i = 0; i < worker_count; i++) {
+			factories_per_worker[i] = create_appx_factory();
+		}
 
-			winrt::hstring logo_uri_string = Uri::UnescapeComponent(package.Logo().Path());
-			// HACK: After all of the convertions of the URI, it is left with forward slash at the start.
-			//       So get rid of it.
-			std::wstring_view logo_uri = wstr_duplicate(logo_uri_string.c_str() + 1, allocator);
-			std::wstring_view display_name = wstr_duplicate(package.DisplayName().c_str(), allocator);
+		size_t batch_size = 2;
+		size_t max_app_descs_per_batch = 8;
+		std::vector<PackageProcessingTaskContext> batches;
 
-			std::filesystem::path install_path = package.InstalledPath().c_str();
-			std::filesystem::path manifest_path = install_path / "AppxManifest.xml";
+		{
+			PROFILE_SCOPE("generate_batches");
+			PackageManager package_manager;
+			auto packages_iterator = package_manager.FindPackagesForUser(sid_hstring);
 
-			if (!std::filesystem::exists(manifest_path)) {
-				continue;
-			}
+			PackageProcessingTaskContext* current_batch = nullptr;
+			for (auto package : packages_iterator) {
+				if (current_batch == nullptr || current_batch->packages.count == batch_size) {
+					Package* package_buffer = arena_alloc_array<Package>(allocator, batch_size);
+					InstalledAppDesc* descs = arena_alloc_array<InstalledAppDesc>(allocator, max_app_descs_per_batch);
 
-			AppManifestQueryState manifest_state{};
-
-			// Based on example from
-			// https://learn.microsoft.com/en-us/windows/win32/appxpkg/how-to-query-package-identity-information
-			HRESULT result = {};
-
-			{
-				PROFILE_SCOPE("create_file_stream");
-				result = SHCreateStreamOnFileEx(manifest_path.c_str(),
-						STGM_READ | STGM_SHARE_EXCLUSIVE,
-						0, FALSE, nullptr,
-						&manifest_state.manifest_input_stream);
-			}
-
-			if (FAILED(result)) {
-				log_installed_apps_query_error("failed to create stream", manifest_path);
-				continue;
-			}
-
-			{
-				PROFILE_SCOPE("create_manifest_reader");
-				result = factory->CreateManifestReader(
-						manifest_state.manifest_input_stream,
-						&manifest_state.manifest_reader);
-			}
-
-			if (FAILED(result)) {
-				log_installed_apps_query_error("failed to create 'IAppxManifestReader'", manifest_path);
-				app_manifest_query_state_release(manifest_state);
-				continue;
-			}
-
-			{
-				PROFILE_SCOPE("get_applications_from_manifest");
-				result = manifest_state.manifest_reader->GetApplications(&manifest_state.apps_enumerator);
-			}
-
-			if (FAILED(result)) {
-				log_installed_apps_query_error("failed to get 'IAppxManifestApplicationsEnumerator'", manifest_path);
-				app_manifest_query_state_release(manifest_state);
-				continue;
-			}
-
-			BOOL has_current = FALSE;
-			result = manifest_state.apps_enumerator->GetHasCurrent(&has_current);
-			if (FAILED(result)) {
-				log_installed_apps_query_error("'IAppxManifestApplicationsEnumerator::GetHasCurrent' failed", manifest_path);
-				app_manifest_query_state_release(manifest_state);
-				continue;
-			}
-
-			while (has_current) {
-				IAppxManifestApplication* application = nullptr;
-				result = manifest_state.apps_enumerator->GetCurrent(&application);
-
-				if (FAILED(result)) {
-					log_installed_apps_query_error("'IAppxManifestApplicationsEnumerator::GetCurrent' failed", manifest_path);
-					app_manifest_query_state_release(manifest_state);
-					application->Release();
-					break;
+					current_batch = &batches.emplace_back();
+					current_batch->factories = Span<IAppxFactory*>(factories_per_worker, worker_count);
+					current_batch->packages = Span<Package>(package_buffer, 0);
+					current_batch->app_descs = Span<InstalledAppDesc>(descs, 0);
+					current_batch->max_app_descs = max_app_descs_per_batch;
 				}
 
-				LPWSTR app_user_model_id = nullptr;
-				result = application->GetAppUserModelId(&app_user_model_id);
-				if (FAILED(result)) {
-					log_installed_apps_query_error("'AppxManifestApplication::GetAppUserModelId' failed", manifest_path);
-					app_manifest_query_state_release(manifest_state);
-					application->Release();
-					break;
-				} else {
-					PROFILE_SCOPE("append_app_desc");
-					InstalledAppDesc& desc = app_ids.emplace_back();
-					desc.id = wstr_duplicate(app_user_model_id, allocator).data();
-					desc.display_name = display_name;
-					desc.logo_uri = logo_uri;
+				// increment the count first, to avoid an out of bounds panic in the `Span<T>`
+				current_batch->packages.count += 1;
 
-					CoTaskMemFree(app_user_model_id);
-				}
+				Package* package_target_location = &current_batch->packages[current_batch->packages.count - 1];
+				// HACK: `Package` class contains a single pointer to the implementation,
+				//       so if we set the whole object to zero, the pointer will be null,
+				//       and won't pass the validity check during it's release
+				//
+				//       Placement new isn't an option here, becase the `Package` class isn't default constractible.
+				memset(package_target_location, 0, sizeof(*package_target_location));
+				*package_target_location = package;
+			}
+		}
 
-				result = manifest_state.apps_enumerator->MoveNext(&has_current);
-				if (FAILED(result)) {
-					log_installed_apps_query_error("'IAppxManifestApplicationsEnumerator::MoveNext' failed", manifest_path);
-					app_manifest_query_state_release(manifest_state);
-					application->Release();
-					break;
-				}
+		// submit jobs
 
-				application->Release();
+		for (auto& batch : batches) {
+			job_system_submit(task_process_package_batch, &batch);
+		}
+
+		// wait for all the jobs to complete
+		job_system_wait_for_all(allocator);
+
+		for (const auto& batch : batches) {
+			for (const auto& installed_app : batch.app_descs) {
+				app_ids.push_back(installed_app);
+			}
+		} 
+
+		// Delete factories
+		{
+			PROFILE_SCOPE("delete_factories");
+			for (uint32_t i = 0; i < worker_count; i++) {
+				factories_per_worker[i]->Release();
 			}
 
-			app_manifest_query_state_release(manifest_state);
+			factories_per_worker = nullptr;
 		}
 	} catch (const winrt::hresult_error& e) {
 		winrt::hstring message = e.message();
 		const wchar_t* message_string = message.c_str();
 		std::wcout << message_string << '\n';
 	}
-
-	factory->Release();
 
 	return app_ids;
 }

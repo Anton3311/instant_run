@@ -4,7 +4,7 @@ set ARCH=x86_64
 set APP_NAME=instant_run
 set SRC=instant_run\src
 
-set FILES=%SRC%\app.cpp %SRC%\main.cpp %SRC%\core.cpp %SRC%\platform.cpp %SRC%\renderer.cpp %SRC%\ui.cpp %SRC%\log.cpp
+set FILES=%SRC%\app.cpp %SRC%\main.cpp %SRC%\core.cpp %SRC%\platform.cpp %SRC%\renderer.cpp %SRC%\ui.cpp %SRC%\log.cpp %SRC%\job_system.cpp
 
 if [%1] == [release] (
 	set CMD_ARGS=%CMD_ARGS% -O3 -DWINDOWS_SUBSYSTEM

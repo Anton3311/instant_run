@@ -3,6 +3,7 @@
 #include "renderer.h"
 #include "ui.h"
 #include "log.h"
+#include "job_system.h"
 
 #include "hook_config.h"
 
@@ -1097,6 +1098,8 @@ int run_app(CommandLineArgs cmd_args) {
 
 	log_info("logger started");
 
+	job_system_init(4);
+
 	initialize_platform();
 
 	if (s_app.use_keyboard_hook) {
@@ -1157,6 +1160,8 @@ int run_app(CommandLineArgs cmd_args) {
 	shutdown_renderer();
 	window_destroy(s_app.window);
 	shutdown_platform();
+
+	job_system_shutdown();
 
 	log_shutdown_thread();
 	log_shutdown();

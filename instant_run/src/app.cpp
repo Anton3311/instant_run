@@ -565,6 +565,12 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		float icon_size = font_get_height(*theme.default_font);
 
 		uint32_t icon_button_count = 3;
+		
+		// Remove run as admin for MS store apps
+		if (entry.is_microsoft_store_app) {
+			icon_button_count -= 1;
+		}
+
 		float icon_row_width = (float)icon_button_count * icon_size
 			+ (float)(icon_button_count - 1) * theme.default_layout_config.item_spacing;
 
@@ -582,8 +588,10 @@ EntryAction draw_result_entry(const ResultEntry& match,
 			action = EntryAction::Launch;
 		}
 
-		if (ui::icon_button(icons.texture, icons.run_as_admin, &close_icon_style, &icon_size)) {
-			action = EntryAction::LaunchAsAdmin;
+		if (!entry.is_microsoft_store_app) {
+			if (ui::icon_button(icons.texture, icons.run_as_admin, &close_icon_style, &icon_size)) {
+				action = EntryAction::LaunchAsAdmin;
+			}
 		}
 
 		if (ui::icon_button(icons.texture, icons.copy, &close_icon_style, &icon_size)) {
@@ -993,6 +1001,8 @@ void run_app_frame() {
 		case EntryAction::Launch:
 			if (entry.is_microsoft_store_app) {
 				platform_launch_installed_app(entry.id);
+				s_app.state = AppState::Sleeping;
+				clear_search_result();
 			} else {
 				run_file(entry.path, false);
 				s_app.state = AppState::Sleeping;
@@ -1049,13 +1059,16 @@ int run_app(CommandLineArgs cmd_args) {
 	initialize_app();
 	initialize_search_entries(s_app.arena);
 
- 	std::vector<InstalledAppDesc> installed_apps = platform_query_installed_apps_ids(s_app.arena);
-	for (const auto& app_desc : installed_apps) {
-		Entry& entry = s_app.entries.emplace_back();
-		entry.name = app_desc.display_name;
-		entry.is_microsoft_store_app = true;
-		entry.icon = INVALID_ICON_POSITION;
-		entry.id = app_desc.id;
+	{
+		PROFILE_SCOPE("query_instaled_apps");
+		std::vector<InstalledAppDesc> installed_apps = platform_query_installed_apps_ids(s_app.arena);
+		for (const auto& app_desc : installed_apps) {
+			Entry& entry = s_app.entries.emplace_back();
+			entry.name = app_desc.display_name;
+			entry.is_microsoft_store_app = true;
+			entry.icon = INVALID_ICON_POSITION;
+			entry.id = app_desc.id;
+		}
 	}
 
 	clear_search_result();

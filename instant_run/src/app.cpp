@@ -848,26 +848,55 @@ void initialize_app() {
 void initialize_search_entries(Arena& arena) {
 	PROFILE_FUNCTION();
 
-	std::vector<std::filesystem::path> known_folders = get_user_folders(
-			UserFolderKind::Desktop | UserFolderKind::StartMenu | UserFolderKind::Programs);
+	{
+		std::vector<std::filesystem::path> known_folders = get_user_folders(
+				UserFolderKind::Desktop | UserFolderKind::StartMenu | UserFolderKind::Programs);
 
-	for (const auto& known_folder : known_folders) {
-		try {
-			walk_directory(known_folder, s_app.entries);
-		} catch (std::exception e) {
+		for (const auto& known_folder : known_folders) {
+			try {
+				walk_directory(known_folder, s_app.entries);
+			} catch (std::exception e) {
+				log_error(e.what());
+			}
 		}
 	}
 
-	ArenaSavePoint temp = arena_begin_temp(arena);
-	StringBuilder builder = { &arena };
-	str_builder_append(builder, "loaded ");
-	str_builder_append(builder, std::to_string(s_app.entries.size()));
-	str_builder_append(builder, " files");
-
-	log_info(std::string_view(builder.string, builder.length));
-	arena_end_temp(temp);
-
 	load_application_icons(s_app.entries, s_app.app_icon_storage, s_app.arena);
+	
+	{
+		PROFILE_SCOPE("query_installed_apps");
+		std::vector<InstalledAppDesc> installed_apps = platform_query_installed_apps_ids(s_app.arena);
+		for (const auto& app_desc : installed_apps) {
+			Entry& entry = s_app.entries.emplace_back();
+			entry.name = app_desc.display_name;
+			entry.is_microsoft_store_app = true;
+			entry.icon = INVALID_ICON_POSITION;
+			entry.id = app_desc.id;
+
+			TexturePixelData data = texture_load_pixel_data(app_desc.logo_uri);
+			if (data.pixels) {
+				ArenaSavePoint temp = arena_begin_temp(s_app.arena);
+				TexturePixelData downsampled = texture_downscale(data, 32, s_app.arena);
+
+				entry.icon = store_app_icon(s_app.app_icon_storage, downsampled.pixels);
+
+				texture_release_pixel_data(data);
+				arena_end_temp(temp);
+			}
+		}
+	}
+
+	{
+		ArenaSavePoint temp = arena_begin_temp(arena);
+		StringBuilder builder = { &arena };
+		str_builder_append(builder, "loaded ");
+		str_builder_append(builder, std::to_string(s_app.entries.size()));
+		str_builder_append(builder, " entries");
+
+		log_info(std::string_view(builder.string, builder.length));
+		arena_end_temp(temp);
+	}
+
 }
 
 void clear_search_result() {
@@ -875,6 +904,24 @@ void clear_search_result() {
 
 	ui::text_input_state_clear(s_app.search_input_state);
 	update_search_result({}, s_app.entries, s_app.result_view_state.matches, s_app.result_view_state.highlights, s_app.arena);
+}
+
+bool resolve_uri_file_path(std::wstring_view uri, std::wstring_view* result) {
+	PROFILE_FUNCTION();
+	std::wstring_view uri_file = L"file:///";
+
+	if (uri.length() < uri_file.length()) {
+		return false;
+	}
+
+	for (size_t i = 0; i < uri_file.length(); i++) {
+		if (uri_file[i] != uri[i]) {
+			return false;
+		}
+	}
+
+	*result = uri.substr(uri_file.length());
+	return true;
 }
 
 void run_app_frame() {
@@ -1054,22 +1101,12 @@ int run_app(CommandLineArgs cmd_args) {
 
 	if (s_app.use_keyboard_hook) {
 		init_keyboard_hook(s_app.arena);
+	} else {
+		log_info("running without the keyboard hook");
 	}
 
 	initialize_app();
 	initialize_search_entries(s_app.arena);
-
-	{
-		PROFILE_SCOPE("query_instaled_apps");
-		std::vector<InstalledAppDesc> installed_apps = platform_query_installed_apps_ids(s_app.arena);
-		for (const auto& app_desc : installed_apps) {
-			Entry& entry = s_app.entries.emplace_back();
-			entry.name = app_desc.display_name;
-			entry.is_microsoft_store_app = true;
-			entry.icon = INVALID_ICON_POSITION;
-			entry.id = app_desc.id;
-		}
-	}
 
 	clear_search_result();
 

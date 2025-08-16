@@ -843,7 +843,10 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 		for (const auto& package : package_collection) {
 			PROFILE_SCOPE("process_package");
 
-			std::wstring_view logo_uri = wstr_duplicate(package.Logo().DisplayUri().c_str(), allocator);
+			winrt::hstring logo_uri_string = Uri::UnescapeComponent(package.Logo().Path());
+			// HACK: After all of the convertions of the URI, it is left with forward slash at the start.
+			//       So get rid of it.
+			std::wstring_view logo_uri = wstr_duplicate(logo_uri_string.c_str() + 1, allocator);
 			std::wstring_view display_name = wstr_duplicate(package.DisplayName().c_str(), allocator);
 
 			std::filesystem::path install_path = package.InstalledPath().c_str();

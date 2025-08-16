@@ -47,6 +47,18 @@ void upload_texture_region(const Texture& texture, UVec2 offset, UVec2 size, con
 bool load_texture(const std::filesystem::path& path, Texture& out_texture);
 void delete_texture(const Texture& texture);
 
+struct TexturePixelData {
+	void* pixels;
+	TextureFormat format;
+	uint32_t width;
+	uint32_t height;
+};
+
+TexturePixelData texture_load_pixel_data(const std::filesystem::path& path);
+void texture_release_pixel_data(const TexturePixelData& pixel_data);
+
+TexturePixelData texture_downscale(const TexturePixelData& source, uint32_t target_size, Arena& allocator);
+
 Font create_font(const uint8_t* data, size_t data_size, float font_size, Arena& arena);
 Font load_font_from_file(const std::filesystem::path& path, float font_size, Arena& arena);
 void delete_font(const Font& font);

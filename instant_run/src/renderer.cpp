@@ -378,6 +378,101 @@ void delete_texture(const Texture& texture) {
 	glDeleteTextures(1, &texture.internal_id);
 }
 
+TexturePixelData texture_load_pixel_data(const std::filesystem::path& path) {
+	PROFILE_FUNCTION();
+
+	if (!std::filesystem::exists(path)) {
+		return {};
+	}
+
+	stbi_set_flip_vertically_on_load(true);
+
+	int width, height, channels;
+	stbi_uc* pixel_data = stbi_load(path.string().c_str(), &width, &height, &channels, 4);
+
+	channels = 4;
+
+	if (!pixel_data) {
+		return {};
+	}
+
+	TexturePixelData data{};
+	data.pixels = pixel_data;
+	data.width = width;
+	data.height = height;
+	switch (channels) {
+	case 4:
+		data.format = TextureFormat::R8_G8_B8_A8;
+		break;
+	default:
+		// Loaded the texture, but the format is not supported
+		free(pixel_data);
+		return {};
+	}
+
+	return data;
+}
+
+void texture_release_pixel_data(const TexturePixelData& pixel_data) {
+	PROFILE_FUNCTION();
+
+	if (pixel_data.pixels == nullptr) {
+		return;
+	}
+
+	free(pixel_data.pixels);
+}
+
+TexturePixelData texture_downscale(const TexturePixelData& source, uint32_t target_size, Arena& allocator) {
+	PROFILE_FUNCTION();
+
+	size_t new_pixel_count = (size_t)target_size * (size_t)target_size;
+
+	TexturePixelData downsampled{};
+	downsampled.width = target_size;
+	downsampled.height = target_size;
+	downsampled.format = source.format;
+
+	switch (source.format) {
+	case TextureFormat::R8_G8_B8_A8: {
+		size_t bytes_per_pixel = 4;
+		uint32_t* new_pixels = arena_alloc_array<uint32_t>(allocator, new_pixel_count);
+		downsampled.pixels = new_pixels;
+
+		const uint8_t* source_pixels = reinterpret_cast<const uint8_t*>(source.pixels);
+
+		// WARN: full of hacks
+		for (uint32_t y = 0; y < target_size; y++) {
+			for (uint32_t x = 0; x < target_size; x++) {
+				uint32_t source_x = x * source.width / target_size;
+				uint32_t source_y = y * source.height / target_size;
+
+				// flip vertically
+				source_y = source.height - source_y - 1;
+
+				uint32_t source_offset = (source_y * source.width + source_x) * bytes_per_pixel;
+
+				uint8_t source_r = source_pixels[source_offset + 3];
+				uint8_t source_g = source_pixels[source_offset + 2];
+				uint8_t source_b = source_pixels[source_offset + 1];
+				uint8_t source_a = source_pixels[source_offset + 0];
+
+				new_pixels[y * target_size + x] = ((uint32_t)source_r << 24)
+					| ((uint32_t)source_g << 16)
+					| ((uint32_t)source_b << 8)
+					| ((uint32_t)source_a);
+			}
+		}
+
+		break;
+	}
+	default:
+		return {};
+	}
+
+	return downsampled;
+}
+
 static RangeU32 s_supported_char_ranges[] = {
 	RangeU32 { 0x0020, 94 },
 	RangeU32 { 0x0400, 256 }

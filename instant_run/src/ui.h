@@ -77,6 +77,11 @@ struct Theme {
 // Text input
 //
 
+struct TextRange {
+	size_t start;
+	size_t end;
+};
+
 struct TextInputState {
 	size_t selection_start;
 	size_t selection_end; // thats where the cursor is
@@ -86,6 +91,14 @@ struct TextInputState {
 
 inline std::wstring_view text_input_state_get_text(const TextInputState& state) {
 	return std::wstring_view(state.buffer.values, state.text_length);
+}
+
+inline TextRange text_input_state_get_selection_range(const TextInputState& state) {
+	if (state.selection_start >= state.selection_end) {
+		return { state.selection_end, state.selection_start };
+	} else {
+		return { state.selection_start, state.selection_end };
+	}
 }
 
 inline void text_input_state_clear(TextInputState& state) {

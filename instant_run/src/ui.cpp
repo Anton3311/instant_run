@@ -584,29 +584,68 @@ inline static size_t find_left_word_boundary(std::wstring_view text, size_t posi
 	return read_pos;
 }
 
-inline static bool text_input_delete(TextInputState& input_state, TextInputActionDirection direction) {
-	switch (direction) {
-	case TextInputActionDirection::Left:
-		if (input_state.selection_start == input_state.selection_end) {
+inline static bool text_input_delete(TextInputState& input_state,
+		TextInputActionDirection direction,
+		bool align_to_word_boundary) {
+	TextRange deletion_range{};
+
+	if (input_state.selection_start != input_state.selection_end) {
+		deletion_range = text_input_state_get_selection_range(input_state);
+
+		return true;
+	} else {
+		std::wstring_view text = text_input_state_get_text(input_state);
+		size_t cursor_position = input_state.selection_end;
+
+		switch (direction) {
+		case TextInputActionDirection::Left:
 			// Can't delete to the left, because the cursor is at the start of the line
-			if (input_state.selection_end == 0) {
+			if (cursor_position == 0) {
 				return false;
 			}
 
-			input_state.selection_start -= 1;
-			input_state.selection_end = input_state.selection_start;
-			input_state.text_length -= 1;
-
-			for (size_t i = input_state.selection_start; i < input_state.text_length; i++) {
-				input_state.buffer[i] = input_state.buffer[i + 1];
+			if (align_to_word_boundary) {
+				deletion_range.start = find_left_word_boundary(text, cursor_position);
+				deletion_range.end = cursor_position;
+			} else {
+				deletion_range.start = cursor_position - 1;
+				deletion_range.end = cursor_position;
 			}
 
-			return true;
+			break;
+		case TextInputActionDirection::Right:
+			// Can't delete to the right, because the cursor is at the end of the line
+			if (cursor_position == input_state.text_length) {
+				return false;
+			}
+
+			if (align_to_word_boundary) {
+				deletion_range.start = cursor_position;
+				deletion_range.end = find_right_word_boundary(text, cursor_position);
+			} else {
+				deletion_range.start = cursor_position;
+				deletion_range.end = cursor_position + 1;
+			}
+
+			break;
 		}
-		break;
 	}
 
-	return false;
+	if (deletion_range.start == deletion_range.end) {
+		return false;
+	}
+
+	size_t text_length_after_selection = input_state.text_length - deletion_range.end;
+	for (size_t i = 0; i < text_length_after_selection; i++) {
+		input_state.buffer[deletion_range.start + i] = input_state.buffer[deletion_range.end + i];
+	}
+
+	size_t deletion_range_length = deletion_range.end - deletion_range.start;
+	input_state.text_length -= deletion_range_length;
+	input_state.selection_start = deletion_range.start;
+	input_state.selection_end = deletion_range.start;
+
+	return true;
 }
 
 inline static void text_input_move_cursor(TextInputState& input_state,
@@ -668,7 +707,12 @@ static bool text_input_behaviour(TextInputState& input_state) {
 			if (key_event.action == InputAction::Pressed) {
 				switch (key_event.code) {
 				case KeyCode::Backspace:
-					changed |= text_input_delete(input_state, TextInputActionDirection::Left);
+				case KeyCode::Delete:
+					changed |= text_input_delete(input_state, 
+							key_event.code == KeyCode::Backspace
+								? TextInputActionDirection::Left
+								: TextInputActionDirection::Right,
+							HAS_FLAG(key_event.modifiers, KeyModifiers::Control));
 					break;
 				case KeyCode::ArrowLeft:
 				case KeyCode::ArrowRight:

@@ -37,14 +37,27 @@ enum class KeyCode {
 	Escape,
 	Enter,
 	Backspace,
+	Delete,
 
 	ArrowUp,
 	ArrowDown,
 	ArrowLeft,
 	ArrowRight,
 
+	Home,
+	End,
+
 	F3,
 };
+
+enum class KeyModifiers {
+	None = 0,
+	Control = 1 << 0,
+	Shift = 1 << 1,
+	Alt = 1 << 2
+};
+
+IMPL_ENUM_FLAGS(KeyModifiers);
 
 struct WindowEvent {
 	WindowEventKind kind;
@@ -65,6 +78,7 @@ struct WindowEvent {
 		struct {
 			InputAction action;
 			KeyCode code;
+			KeyModifiers modifiers;
 		} key;
 
 		struct {

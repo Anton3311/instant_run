@@ -32,6 +32,8 @@
 		{ return (enum_name)((ENUM_TYPE(enum_name))a & (ENUM_TYPE(enum_name))b); } \
 	constexpr enum_name operator|(enum_name a, enum_name b) \
 		{ return (enum_name)((ENUM_TYPE(enum_name))a | (ENUM_TYPE(enum_name))b); } \
+	constexpr enum_name& operator|=(enum_name& a, enum_name b) \
+		{ a = (enum_name)((ENUM_TYPE(enum_name))a | (ENUM_TYPE(enum_name))b); return a; } \
 	constexpr bool operator==(enum_name a, int b) { return (int)a == b; } \
 	constexpr bool operator!=(enum_name a, int b) { return (int)a != b; } \
 	constexpr enum_name operator~(enum_name a) \

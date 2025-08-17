@@ -433,6 +433,70 @@ void image(const Texture& texture, Vec2 size, Rect uv_rect, Color tint) {
 	draw_rect(bounds, tint, texture, uv_rect);
 }
 
+//
+// Text Input
+//
+
+enum class TextInputActionDirection {
+	Left,
+	Right
+};
+
+inline static bool text_input_delete(TextInputState& input_state, TextInputActionDirection direction) {
+	switch (direction) {
+	case TextInputActionDirection::Left:
+		if (input_state.selection_start == input_state.selection_end) {
+			// Can't delete to the left, because the cursor is at the start of the line
+			if (input_state.selection_end == 0) {
+				return false;
+			}
+
+			input_state.selection_start -= 1;
+			input_state.selection_end = input_state.selection_start;
+			input_state.text_length -= 1;
+
+			for (size_t i = input_state.selection_start; i < input_state.text_length; i++) {
+				input_state.buffer[i] = input_state.buffer[i + 1];
+			}
+
+			return true;
+		}
+		break;
+	}
+
+	return false;
+}
+
+inline static void text_input_move_cursor(TextInputState& input_state,
+		TextInputActionDirection direction,
+		bool extend_selection) {
+
+	// The user wants to move the cursor without keeping the selection,
+	// but there is a non-empty text selection,
+	// thus we need to collaspe the selection without moving the cursor.
+	if (!extend_selection && input_state.selection_start != input_state.selection_end) {
+		input_state.selection_start = input_state.selection_end;
+		return;
+	}
+
+	switch (direction) {
+	case TextInputActionDirection::Left:
+		if (input_state.selection_end > 0) {
+			input_state.selection_end -= 1;
+		}
+		break;
+	case TextInputActionDirection::Right:
+		if (input_state.selection_end < input_state.text_length) {
+			input_state.selection_end += 1;
+		}
+		break;
+	}
+
+	if (!extend_selection) {
+		input_state.selection_start = input_state.selection_end;
+	}
+}
+
 static bool text_input_behaviour(TextInputState& input_state) {
 	PROFILE_FUNCTION();
 
@@ -445,20 +509,24 @@ static bool text_input_behaviour(TextInputState& input_state) {
 			if (key_event.action == InputAction::Pressed) {
 				switch (key_event.code) {
 				case KeyCode::Backspace:
-					if (input_state.text_length > 0) {
-						input_state.text_length -= 1;
-						input_state.cursor_position -= 1;
-						changed = true;
-					} 
+					changed |= text_input_delete(input_state, TextInputActionDirection::Left);
 					break;
 				case KeyCode::ArrowLeft:
-					if (input_state.cursor_position > 0) {
-						input_state.cursor_position -= 1;
-					}
-					break;
 				case KeyCode::ArrowRight:
-					if (input_state.cursor_position < input_state.text_length) {
-						input_state.cursor_position += 1;
+					text_input_move_cursor(input_state,
+							key_event.code == KeyCode::ArrowLeft
+								? TextInputActionDirection::Left
+								: TextInputActionDirection::Right,
+							HAS_FLAG(key_event.modifiers, KeyModifiers::Shift));
+					break;
+				case KeyCode::Home:
+				case KeyCode::End:
+					input_state.selection_end = key_event.code == KeyCode::Home
+						? 0
+						: input_state.text_length;
+
+					if (!HAS_FLAG(key_event.modifiers, KeyModifiers::Shift)) {
+						input_state.selection_start = input_state.selection_end;
 					}
 					break;
 				default:
@@ -475,16 +543,17 @@ static bool text_input_behaviour(TextInputState& input_state) {
 				// HACK: Allow any char
 
 				uint32_t glyph_index = font_get_glyph_index(*s_ui_state.theme.default_font, char_event.c);
-				if (glyph_index != UINT32_MAX) {
-					
-					size_t after_cursor_text_length = input_state.text_length - input_state.cursor_position;
-					for (int64_t i = input_state.text_length; i > input_state.cursor_position; i--) {
+				if (glyph_index != UINT32_MAX && input_state.selection_start == input_state.selection_end) {
+					size_t cursor_position = input_state.selection_end;
+					size_t after_cursor_text_length = input_state.text_length - cursor_position;
+					for (int64_t i = input_state.text_length; i > cursor_position; i--) {
 						input_state.buffer.values[i] = input_state.buffer.values[i - 1];
 					}
 
-					input_state.buffer.values[input_state.cursor_position] = char_event.c;
+					input_state.buffer.values[cursor_position] = char_event.c;
 					input_state.text_length += 1;
-					input_state.cursor_position += 1;
+					input_state.selection_end += 1;
+					input_state.selection_start = input_state.selection_end;
 
 					changed = true;
 				}
@@ -512,13 +581,32 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 	std::wstring_view text(input_state.buffer.values, input_state.text_length);
 
 	// Compute text size
-	std::wstring_view text_before_cursor = text.substr(0, input_state.cursor_position);
-	std::wstring_view text_after_cursor = text.substr(input_state.cursor_position);
+	std::wstring_view text_before_selection;
+	std::wstring_view text_inside_selection;
+	std::wstring_view text_after_selection;
 
-	Vec2 text_before_cursor_size = compute_text_size(*s_ui_state.theme.default_font, text_before_cursor);
-	Vec2 text_after_cursor_size = compute_text_size(*s_ui_state.theme.default_font, text_after_cursor);
+	{
+		size_t text_selection_start = input_state.selection_start;
+		size_t text_selection_end = input_state.selection_end;
 
-	Vec2 text_size = Vec2 { text_before_cursor_size.x + text_after_cursor_size.x, s_ui_state.theme.default_font->size };
+		if (text_selection_start > text_selection_end) {
+			std::swap(text_selection_start, text_selection_end);
+		}
+
+		text_before_selection = text.substr(0, text_selection_start);
+		text_inside_selection = text.substr(text_selection_start, text_selection_end - text_selection_start);
+		text_after_selection = text.substr(text_selection_end);
+	}
+
+	Vec2 text_before_selection_size = compute_text_size(*s_ui_state.theme.default_font, text_before_selection);
+	Vec2 text_inside_selection_size = compute_text_size(*s_ui_state.theme.default_font, text_inside_selection);
+	Vec2 text_after_selection_size = compute_text_size(*s_ui_state.theme.default_font, text_after_selection);
+
+	Vec2 text_size = Vec2 {
+		text_before_selection_size.x + text_inside_selection_size.x + text_after_selection_size.x,
+		s_ui_state.theme.default_font->size
+	};
+
 	Vec2 text_field_size{};
 
 	switch (s_ui_state.layout.next_item_size_constraint) {
@@ -546,15 +634,42 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 	draw_rect(bounds, s_ui_state.theme.widget_color);
 
 	Vec2 text_position = bounds.min + s_ui_state.theme.frame_padding;
+
+	// draw selection
+	if (input_state.selection_start != input_state.selection_end) {
+		float selection_width = text_before_selection_size.x + text_inside_selection_size.x;
+
+		Rect text_selection_rect{};
+		text_selection_rect.min.x = text_position.x + text_before_selection_size.x;
+		text_selection_rect.min.y = text_position.y;
+		text_selection_rect.max.x = text_position.x + selection_width;
+		text_selection_rect.max.y = text_position.y + text_size.y;
+
+		draw_rect(text_selection_rect, Color { 0, 0, 255, 255 });
+	}
+
+	// draw text
 	if (text.length() > 0) {
 		draw_text(text, text_position, *s_ui_state.theme.default_font, s_ui_state.theme.text_color);
 	} else if (prompt.length() > 0) {
 		draw_text(prompt, text_position, *s_ui_state.theme.default_font, s_ui_state.theme.prompt_text_color);
 	}
 
-	Vec2 text_cursor_position = text_position + Vec2 { text_before_cursor_size.x, 0.0f };
-	float cursor_height = (float)(s_ui_state.theme.default_font->ascent - s_ui_state.theme.default_font->descent);
-	draw_rect(Rect { text_cursor_position, text_cursor_position + Vec2 { 2.0f, text_size.y } }, WHITE);
+	// draw cursor
+	{
+		float cursor_offset = 0.0f;
+		if (input_state.selection_start >= input_state.selection_end) {
+			// cursor is on the left boundary of the selection
+			cursor_offset = text_before_selection_size.x;
+		} else {
+			// cursor is on the right boundary of the selection
+			cursor_offset = text_before_selection_size.x + text_inside_selection_size.x;
+		}
+
+		Vec2 text_cursor_position = Vec2 { text_position.x + cursor_offset, text_position.y };
+		Vec2 cursor_size = Vec2 { 2.0f, text_size.y }; // cursor has the same height as the text
+		draw_rect(Rect { text_cursor_position, text_cursor_position + cursor_size }, WHITE);
+	}
 
 	return changed;
 }

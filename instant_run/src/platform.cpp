@@ -455,6 +455,24 @@ void window_destroy(Window* window) {
 	delete window;
 }
 
+static KeyModifiers get_key_modifiers() {
+	KeyModifiers result = KeyModifiers::None;
+
+	if (GetAsyncKeyState(VK_CONTROL)) {
+		result |= KeyModifiers::Control;
+	}
+
+	if (GetAsyncKeyState(VK_SHIFT)) {
+		result |= KeyModifiers::Shift;
+	}
+
+	if (GetAsyncKeyState(VK_MENU)) {
+		result |= KeyModifiers::Alt;
+	}
+
+	return result;
+}
+
 LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM lParam) {
 	PROFILE_FUNCTION();
 	Window* window = reinterpret_cast<Window*>(GetWindowLongPtrW(window_handle, GWLP_USERDATA));
@@ -524,6 +542,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 				event.kind = WindowEventKind::Key;
 				event.data.key.action = InputAction::Pressed;
 				event.data.key.code = key_code;
+				event.data.key.modifiers = get_key_modifiers();
 			}
 		}
 
@@ -661,6 +680,15 @@ bool translate_key_code(WPARAM virtual_key_code, KeyCode& output) {
 		return true;
 	case VK_F3:
 		output = KeyCode::F3;
+		return true;
+	case VK_HOME:
+		output = KeyCode::Home;
+		return true;
+	case VK_END:
+		output = KeyCode::End;
+		return true;
+	case VK_DELETE:
+		output = KeyCode::Delete;
 		return true;
 	}
 

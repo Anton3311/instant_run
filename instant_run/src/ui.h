@@ -78,13 +78,15 @@ struct Theme {
 //
 
 struct TextInputState {
-	size_t cursor_position;
+	size_t selection_start;
+	size_t selection_end; // thats where the cursor is
 	size_t text_length;
 	Span<wchar_t> buffer;
 };
 
 inline void text_input_state_clear(TextInputState& state) {
-	state.cursor_position = 0;
+	state.selection_start = 0;
+	state.selection_end = 0;
 	state.text_length = 0;
 }
 

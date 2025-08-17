@@ -5,6 +5,7 @@
 *.rdi
 *.o
 *.tracy
+build
 bin
 bin_int
 raddbg_proj

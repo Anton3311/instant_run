@@ -455,6 +455,44 @@ void window_destroy(Window* window) {
 	delete window;
 }
 
+bool window_copy_text_to_clipboard(const Window& window, std::wstring_view text) {
+	PROFILE_FUNCTION();
+
+	if (text.length() == 0) {
+		return true;
+	}
+
+	if (!OpenClipboard(window.handle)) {
+		platform_log_error_message();
+		return false;
+	}
+
+	bool result = false;
+	HGLOBAL global_copy = GlobalAlloc(GMEM_MOVEABLE, (text.length() + 1) * sizeof(text[0]));
+
+	if (global_copy != nullptr) {
+		wchar_t* str_copy = (wchar_t*)GlobalLock(global_copy);
+		memcpy(str_copy, text.data(), text.length() * sizeof(text[0]));
+		str_copy[text.length()] = 0;
+
+		GlobalUnlock(global_copy);
+
+		if (!SetClipboardData(CF_UNICODETEXT, global_copy)) {
+			platform_log_error_message();
+			result = false;
+		} else {
+			result = true;
+		}
+	}
+
+	if (!CloseClipboard()) {
+		platform_log_error_message();
+		return false;
+	}
+
+	return result;
+}
+
 static KeyModifiers get_key_modifiers() {
 	KeyModifiers result = KeyModifiers::None;
 
@@ -657,6 +695,18 @@ bool translate_key_code(WPARAM virtual_key_code, KeyCode& output) {
 	PROFILE_FUNCTION();
 
 	switch (virtual_key_code) {
+	case 'A':
+		output = KeyCode::A;
+		return true;
+	case 'C':
+		output = KeyCode::C;
+		return true;
+	case 'V':
+		output = KeyCode::V;
+		return true;
+	case 'X':
+		output = KeyCode::X;
+		return true;
 	case VK_ESCAPE:
 		output = KeyCode::Escape;
 		return true;

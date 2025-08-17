@@ -101,6 +101,11 @@ inline TextRange text_input_state_get_selection_range(const TextInputState& stat
 	}
 }
 
+inline std::wstring_view text_input_state_get_selected_text(const TextInputState& state) {
+	TextRange selection = text_input_state_get_selection_range(state);
+	return text_input_state_get_text(state).substr(selection.start, selection.end - selection.start);
+}
+
 inline void text_input_state_clear(TextInputState& state) {
 	state.selection_start = 0;
 	state.selection_end = 0;

@@ -591,8 +591,6 @@ inline static bool text_input_delete(TextInputState& input_state,
 
 	if (input_state.selection_start != input_state.selection_end) {
 		deletion_range = text_input_state_get_selection_range(input_state);
-
-		return true;
 	} else {
 		std::wstring_view text = text_input_state_get_text(input_state);
 		size_t cursor_position = input_state.selection_end;
@@ -731,6 +729,19 @@ static bool text_input_behaviour(TextInputState& input_state) {
 
 					if (!HAS_FLAG(key_event.modifiers, KeyModifiers::Shift)) {
 						input_state.selection_start = input_state.selection_end;
+					}
+					break;
+				case KeyCode::A:
+					if (HAS_FLAG(key_event.modifiers, KeyModifiers::Control)) {
+						input_state.selection_start = 0;
+						input_state.selection_end = input_state.text_length;
+					}
+					break;
+				case KeyCode::C:
+					if (HAS_FLAG(key_event.modifiers, KeyModifiers::Control)) {
+						window_copy_text_to_clipboard(
+								*s_ui_state.window,
+								text_input_state_get_selected_text(input_state));
 					}
 					break;
 				default:

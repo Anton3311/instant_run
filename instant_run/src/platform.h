@@ -34,6 +34,11 @@ enum class InputAction {
 };
 
 enum class KeyCode {
+	A,
+	C,
+	V,
+	X,
+
 	Escape,
 	Enter,
 	Backspace,
@@ -134,6 +139,8 @@ Span<const WindowEvent> window_get_events(const Window* window);
 UVec2 window_get_framebuffer_size(const Window* window);
 void window_close(Window& window);
 void window_destroy(Window* window);
+
+bool window_copy_text_to_clipboard(const Window& window, std::wstring_view text);
 
 //
 // File system

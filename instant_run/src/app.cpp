@@ -464,8 +464,9 @@ enum class EntryAction {
 	CopyPath,
 };
 
-float compute_result_entry_height() {
-	return ui::get_default_widget_height();
+float compute_result_entry_height(const ApplicationIconsStorage& app_icon_storage) {
+	const ui::Theme& theme = ui::get_theme();
+	return (float)app_icon_storage.icon_size + theme.frame_padding.y * 2.0f;
 }
 
 void draw_result_entry_text(const Entry& entry,
@@ -519,9 +520,10 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	PROFILE_FUNCTION();
 	const ui::Theme& theme = ui::get_theme();
 
-	const float item_height = compute_result_entry_height();
+	const float item_height = compute_result_entry_height(app_icon_storage);
 	ui::LayoutConfig entry_layout_config = theme.default_layout_config;
 	entry_layout_config.padding = theme.frame_padding;
+	entry_layout_config.cross_axis_align = ui::AxisAlignment::Center;
 	ui::begin_horizontal_layout(&entry_layout_config, &item_height);
 
 	Rect item_bounds = ui::get_max_layout_bounds();
@@ -547,7 +549,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	{
 		// Icon
 		
-		float icon_size = theme.default_font->size;
+		float icon_size = (float)app_icon_storage.icon_size;
 		
 		ui::add_item(Vec2 { icon_size, icon_size });
 
@@ -1010,7 +1012,7 @@ void run_app_frame() {
 	ui::begin_vertical_layout(&result_list_layout_config);
 
 	float available_height = ui::get_available_layout_space();
-	float item_height = compute_result_entry_height();
+	float item_height = compute_result_entry_height(s_app.app_icon_storage);
 	float item_spacing = theme.default_layout_config.item_spacing;
 
 	float item_count = (available_height + item_spacing) / (item_height + item_spacing);

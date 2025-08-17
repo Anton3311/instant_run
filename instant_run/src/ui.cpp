@@ -1039,14 +1039,16 @@ void begin_fixed_horizontal_layout(Vec2 prefered_size, const LayoutConfig* confi
 
 	Vec2 cursor = s_ui_state.layout.cursor;
 
-	Rect content_bounds{};
-	content_bounds.min = cursor + config->padding;
-	content_bounds.max = content_bounds.min + prefered_size - config->padding;
-	
 	// NOTE: padding is already included once in the bounds.min
 	Rect bounds{};
 	bounds.min = cursor;
 	bounds.max = bounds.min + prefered_size + config->padding;
+
+	bounds = layout_item_rect(bounds);
+
+	Rect content_bounds{};
+	content_bounds.min = bounds.min + config->padding;
+	content_bounds.max = content_bounds.min + prefered_size - config->padding;
 
 	s_ui_state.layout_stack.push_back(s_ui_state.layout);
 

@@ -23,6 +23,10 @@
 #define PROFILE_NAME_THREAD(name)
 #endif
 
+#if defined(BUILD_DEBUG) || defined(BUILD_PROFILING)
+#define BUILD_DEV
+#endif
+
 #define HAS_FLAG(flag_set, flag) (((flag_set) & (flag)) == (flag))
 #define HAS_ANY_FLAG(flag_set, flag) (((flag_set) & (flag)) != 0)
 

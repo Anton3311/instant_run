@@ -842,7 +842,9 @@ void initialize_app() {
 	ui::set_theme(theme);
 
 	ui::Options& options = ui::get_options();
+#ifdef BUILD_DEV
 	options.debug_layout_overflow = true;
+#endif
 
 	s_app.state = AppState::Sleeping;
 	s_app.wait_for_window_events = false;
@@ -948,10 +950,12 @@ void run_app_frame() {
 				case KeyCode::Enter:
 					enter_pressed = true;
 					break;
+#ifdef BUILD_DEV
 				case KeyCode::F3:
 					options.debug_layout = !options.debug_layout;
 					options.debug_item_bounds = !options.debug_item_bounds;
 					break;
+#endif
 				default:
 					process_result_view_key_event(s_app.result_view_state, key_event.code);
 					break;

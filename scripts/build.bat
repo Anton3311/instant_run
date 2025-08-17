@@ -7,19 +7,19 @@ set SRC=instant_run\src
 set FILES=%SRC%\app.cpp %SRC%\main.cpp %SRC%\core.cpp %SRC%\platform.cpp %SRC%\renderer.cpp %SRC%\ui.cpp %SRC%\log.cpp %SRC%\job_system.cpp
 
 if [%1] == [release] (
-	set CMD_ARGS=%CMD_ARGS% -O3 -DWINDOWS_SUBSYSTEM
+	set CMD_ARGS=%CMD_ARGS% -O3 -DWINDOWS_SUBSYSTEM -DBUILD_RELEASE
 	set BIN_DIR=bin\release_%PLATFORM%_%ARCH%
 
 	:: BIN_INT_DIR is for precompiled libs, they are the same for 'release' and 'profiling', because they don't use tracy.
 	set BIN_INT_DIR=bin_int\release_%PLATFORM%_%ARCH%
 ) else if [%1] == [profiling] (
-	set CMD_ARGS=%CMD_ARGS% -DTRACY_ENABLE -DENABLE_PROFILING -O3 -g
+	set CMD_ARGS=%CMD_ARGS% -DTRACY_ENABLE -DENABLE_PROFILING -O3 -g -DBUILD_PROFILING
 	set BIN_DIR=bin\profiling_%PLATFORM%_%ARCH%
 
 	set BIN_INT_DIR=bin_int\release_%PLATFORM%_%ARCH%
 	set FILES=%FILES% vendor\Tracy\TracyClient.cpp
 ) else (
-	set CMD_ARGS=%CMD_ARGS% -g
+	set CMD_ARGS=%CMD_ARGS% -g -DBUILD_DEBUG
 
 	set BIN_DIR=bin\debug_%PLATFORM%_%ARCH%
 	set BIN_INT_DIR=bin_int\debug_%PLATFORM%_%ARCH%

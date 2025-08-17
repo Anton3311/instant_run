@@ -569,7 +569,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 		
 		// Remove run as admin for MS store apps
 		if (entry.is_microsoft_store_app) {
-			icon_button_count -= 1;
+			icon_button_count -= 2;
 		}
 
 		float icon_row_width = (float)icon_button_count * icon_size
@@ -593,10 +593,10 @@ EntryAction draw_result_entry(const ResultEntry& match,
 			if (ui::icon_button(icons.texture, icons.run_as_admin, &close_icon_style, &icon_size)) {
 				action = EntryAction::LaunchAsAdmin;
 			}
-		}
 
-		if (ui::icon_button(icons.texture, icons.copy, &close_icon_style, &icon_size)) {
-			action = EntryAction::CopyPath;
+			if (ui::icon_button(icons.texture, icons.copy, &close_icon_style, &icon_size)) {
+				action = EntryAction::CopyPath;
+			}
 		}
 
 		// Reduce the available_width of the text row, so it doesn't overflow or go under the iocn buttons

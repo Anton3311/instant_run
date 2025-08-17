@@ -1065,6 +1065,10 @@ void run_app_frame() {
 			}
 			break;
 		case EntryAction::CopyPath:
+			// path is not available for imicrosoft store apps
+			if (!entry.is_microsoft_store_app) {
+				window_copy_text_to_clipboard(*s_app.window, entry.path.wstring());
+			}
 			break;
 		}
 	}

@@ -584,6 +584,22 @@ inline static size_t find_left_word_boundary(std::wstring_view text, size_t posi
 	return read_pos;
 }
 
+inline static void text_input_delete_range(TextInputState& input_state, TextRange deletion_range) {
+	if (deletion_range.start == deletion_range.end) {
+		return;
+	}
+
+	size_t text_length_after_selection = input_state.text_length - deletion_range.end;
+	for (size_t i = 0; i < text_length_after_selection; i++) {
+		input_state.buffer[deletion_range.start + i] = input_state.buffer[deletion_range.end + i];
+	}
+
+	size_t deletion_range_length = deletion_range.end - deletion_range.start;
+	input_state.text_length -= deletion_range_length;
+	input_state.selection_start = deletion_range.start;
+	input_state.selection_end = deletion_range.start;
+}
+
 inline static bool text_input_delete(TextInputState& input_state,
 		TextInputActionDirection direction,
 		bool align_to_word_boundary) {
@@ -633,15 +649,7 @@ inline static bool text_input_delete(TextInputState& input_state,
 		return false;
 	}
 
-	size_t text_length_after_selection = input_state.text_length - deletion_range.end;
-	for (size_t i = 0; i < text_length_after_selection; i++) {
-		input_state.buffer[deletion_range.start + i] = input_state.buffer[deletion_range.end + i];
-	}
-
-	size_t deletion_range_length = deletion_range.end - deletion_range.start;
-	input_state.text_length -= deletion_range_length;
-	input_state.selection_start = deletion_range.start;
-	input_state.selection_end = deletion_range.start;
+	text_input_delete_range(input_state, deletion_range);
 
 	return true;
 }
@@ -742,6 +750,20 @@ static bool text_input_behaviour(TextInputState& input_state) {
 						window_copy_text_to_clipboard(
 								*s_ui_state.window,
 								text_input_state_get_selected_text(input_state));
+					}
+					break;
+				case KeyCode::X:
+					if (HAS_FLAG(key_event.modifiers, KeyModifiers::Control)) {
+						TextRange selection_range = text_input_state_get_selection_range(input_state);
+
+						if (selection_range.start != selection_range.end) {
+							window_copy_text_to_clipboard(
+									*s_ui_state.window,
+									text_input_state_get_selected_text(input_state));
+
+							text_input_delete_range(input_state, selection_range);
+							changed = true;
+						}
 					}
 					break;
 				default:

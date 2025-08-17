@@ -1148,6 +1148,8 @@ int run_app(CommandLineArgs cmd_args) {
 			PROFILE_END_FRAME("Main");
 			break;
 		case AppState::Sleeping:
+			clear_search_result();
+
 			window_hide(s_app.window);
 			enter_sleep_mode();
 

@@ -442,6 +442,148 @@ enum class TextInputActionDirection {
 	Right
 };
 
+inline static bool is_word_separator(wchar_t c) {
+	switch (c) {
+	case L',':
+	case L'.':
+	case L':':
+	case L';':
+	case L'|':
+	case L'<':
+	case L'>':
+
+	case L'!':
+	case L'@':
+	case L'#':
+	case L'$':
+	case L'%':
+	case L'^':
+	case L'&':
+	case L'*':
+	case L'(':
+	case L')':
+
+	case L'[':
+	case L']':
+	case L'{':
+	case L'}':
+
+	case L'\'':
+	case L'"':
+	case L'`':
+
+	// whitespace
+	case L' ':
+	case L'\f':
+	case L'\n':
+	case L'\r':
+	case L'\t':
+	case L'\v':
+		return true;
+	}
+	return false;
+}
+
+// look for a word boundary when moving the cursor to the right
+inline static size_t find_right_word_boundary(std::wstring_view text, size_t position) {
+	PROFILE_FUNCTION();
+
+	size_t read_pos = position;
+
+	if (is_word_separator(text[position])) {
+		// The cursor is placed on the whitespace char.
+		// In such a case find the left boundary of the first word to the right
+		//
+		// Hello    world
+		//       ^  ^
+		//       |  |- found boundary
+		//       |- cursor position
+		read_pos += 1;
+		while (read_pos < text.length()) {
+			if (is_word_separator(text[read_pos])) {
+				read_pos += 1;
+			} else {
+				break;
+			}
+		}
+	} else {
+		// The cursor is placed in the middle of the word.
+		// In this case, skip until the end of the current word, and then skip all the subsequent whitespace.
+		//
+		// Hello hello   world
+		//         ^     ^
+		//         |     |- found boundary
+		//         |- cursor position
+
+		while (read_pos < text.length()) {
+			if (is_word_separator(text[read_pos])) {
+				break;
+			}
+
+			read_pos += 1;
+		}
+
+		while (read_pos < text.length()) {
+			if (!is_word_separator(text[read_pos])) {
+				break;
+			}
+
+			read_pos += 1;
+		}
+	}
+
+	return read_pos;
+}
+
+// look for a word boundary when moving the cursor to the left
+inline static size_t find_left_word_boundary(std::wstring_view text, size_t position) {
+	PROFILE_FUNCTION();
+
+	if (position == 0) {
+		return 0;
+	}
+
+	size_t read_pos = position;
+	if (is_word_separator(text[read_pos - 1])) {
+		// The cursor is placed on a seperator char
+		// Skip all the separator chars, and then move until the start of the next word (in the left direction)
+		//
+		// Hello hello   world
+		//       ^     ^
+		//       |     |- cursor position
+		//       |- found boundary
+		while (read_pos > 0) {
+			if (is_word_separator(text[read_pos - 1])) {
+				read_pos -= 1;
+			} else {
+				break;
+			}
+		}
+
+		while (read_pos > 0) {
+			if (is_word_separator(text[read_pos - 1])) {
+				break;
+			} else {
+				read_pos -= 1;
+			}
+		}
+	} else {
+		// Hello hello   world
+		//               ^  ^
+		//               |  |- cursor position
+		//               |- found boundary
+		while (read_pos > 0) {
+			if (is_word_separator(text[read_pos - 1])) {
+				break;
+			}
+
+			read_pos -= 1;
+		}
+	}
+	
+	return read_pos;
+}
+
 inline static bool text_input_delete(TextInputState& input_state, TextInputActionDirection direction) {
 	switch (direction) {
 	case TextInputActionDirection::Left:
@@ -469,7 +611,8 @@ inline static bool text_input_delete(TextInputState& input_state, TextInputActio
 
 inline static void text_input_move_cursor(TextInputState& input_state,
 		TextInputActionDirection direction,
-		bool extend_selection) {
+		bool extend_selection,
+		bool align_to_word_boundary) {
 
 	// The user wants to move the cursor without keeping the selection,
 	// but there is a non-empty text selection,
@@ -481,12 +624,28 @@ inline static void text_input_move_cursor(TextInputState& input_state,
 
 	switch (direction) {
 	case TextInputActionDirection::Left:
-		if (input_state.selection_end > 0) {
+		if (input_state.selection_end == 0) {
+			break;
+		}
+
+		if (align_to_word_boundary) {
+			input_state.selection_end = find_left_word_boundary(
+					text_input_state_get_text(input_state),
+					input_state.selection_end);
+		} else {
 			input_state.selection_end -= 1;
 		}
 		break;
 	case TextInputActionDirection::Right:
-		if (input_state.selection_end < input_state.text_length) {
+		if (input_state.selection_end == input_state.text_length) {
+			break;
+		}
+
+		if (align_to_word_boundary) {
+			input_state.selection_end = find_right_word_boundary(
+					text_input_state_get_text(input_state),
+					input_state.selection_end);
+		} else {
 			input_state.selection_end += 1;
 		}
 		break;
@@ -517,7 +676,8 @@ static bool text_input_behaviour(TextInputState& input_state) {
 							key_event.code == KeyCode::ArrowLeft
 								? TextInputActionDirection::Left
 								: TextInputActionDirection::Right,
-							HAS_FLAG(key_event.modifiers, KeyModifiers::Shift));
+							HAS_FLAG(key_event.modifiers, KeyModifiers::Shift),
+							HAS_FLAG(key_event.modifiers, KeyModifiers::Control));
 					break;
 				case KeyCode::Home:
 				case KeyCode::End:

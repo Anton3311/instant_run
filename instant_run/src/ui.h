@@ -84,6 +84,10 @@ struct TextInputState {
 	Span<wchar_t> buffer;
 };
 
+inline std::wstring_view text_input_state_get_text(const TextInputState& state) {
+	return std::wstring_view(state.buffer.values, state.text_length);
+}
+
 inline void text_input_state_clear(TextInputState& state) {
 	state.selection_start = 0;
 	state.selection_end = 0;

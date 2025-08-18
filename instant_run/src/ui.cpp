@@ -37,6 +37,7 @@ enum class MouseButtonState {
 };
 
 struct State {
+	Arena* arena;
 	const Window* window;
 	Theme theme;
 	Options options;
@@ -62,8 +63,9 @@ static State s_ui_state;
 // UI Functions
 //
 
-void initialize(const Window& window) {
+void initialize(const Window& window, Arena& arena) {
 	s_ui_state.window = &window;
+	s_ui_state.arena = &arena;
 }
 
 void compute_overflow_rects(Rect item_rect, Rect max_content_bounds) {
@@ -600,6 +602,33 @@ inline static void text_input_delete_range(TextInputState& input_state, TextRang
 	input_state.selection_end = deletion_range.start;
 }
 
+inline static bool text_input_replace_range(TextInputState& input_state, TextRange range, std::wstring_view new_string) {
+	if (new_string.length() == 0) {
+		return false;
+	}
+	
+	size_t range_length = range.end - range.start;
+
+	if (range_length < new_string.length()){
+		size_t offset = range.start + new_string.length() - range.end;
+
+		for (size_t i = input_state.text_length; i > range.end + offset; i--) {
+			input_state.buffer[i - 1] = input_state.buffer[i - 1 - offset];
+		}
+	}
+
+	memcpy(input_state.buffer.values + range.start,
+			new_string.data(),
+			sizeof(new_string[0]) * new_string.length());
+
+	input_state.text_length -= range_length;
+	input_state.text_length += new_string.length();
+	input_state.selection_start = range.start + new_string.length();
+	input_state.selection_end = input_state.selection_start;
+
+	return true;
+}
+
 inline static bool text_input_delete(TextInputState& input_state,
 		TextInputActionDirection direction,
 		bool align_to_word_boundary) {
@@ -750,6 +779,21 @@ static bool text_input_behaviour(TextInputState& input_state) {
 						window_copy_text_to_clipboard(
 								*s_ui_state.window,
 								text_input_state_get_selected_text(input_state));
+					}
+					break;
+				case KeyCode::V:
+					if (HAS_FLAG(key_event.modifiers, KeyModifiers::Control)) {
+						ArenaSavePoint temp = arena_begin_temp(*s_ui_state.arena);
+
+						std::wstring_view text = window_read_clipboard_text(*s_ui_state.window, *s_ui_state.arena);
+						if (text.length() != 0) {
+							changed |= text_input_replace_range(
+									input_state,
+									text_input_state_get_selection_range(input_state),
+									text);
+						}
+
+						arena_end_temp(temp);
 					}
 					break;
 				case KeyCode::X:

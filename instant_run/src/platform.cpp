@@ -493,6 +493,37 @@ bool window_copy_text_to_clipboard(const Window& window, std::wstring_view text)
 	return result;
 }
 
+std::wstring_view window_read_clipboard_text(const Window& window, Arena& allocator) {
+	PROFILE_FUNCTION();
+
+	if (!OpenClipboard(window.handle)) {
+		platform_log_error_message();
+		return {};
+	}
+
+	if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) {
+		return {};
+	}
+
+	HANDLE data = GetClipboardData(CF_UNICODETEXT);
+	if (!data) {
+		CloseClipboard();
+		return {};
+	}
+
+	wchar_t* string = (wchar_t*)GlobalLock(data);
+
+	std::wstring_view string_copy = wstr_duplicate(string, allocator);
+
+	GlobalUnlock(data);
+
+	if (!CloseClipboard()) {
+		platform_log_error_message();
+	}
+
+	return string_copy;
+}
+
 static KeyModifiers get_key_modifiers() {
 	KeyModifiers result = KeyModifiers::None;
 

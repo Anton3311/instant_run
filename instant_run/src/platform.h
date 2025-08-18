@@ -141,6 +141,7 @@ void window_close(Window& window);
 void window_destroy(Window* window);
 
 bool window_copy_text_to_clipboard(const Window& window, std::wstring_view text);
+std::wstring_view window_read_clipboard_text(const Window& window, Arena& allocator);
 
 //
 // File system

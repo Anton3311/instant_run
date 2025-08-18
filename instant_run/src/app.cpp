@@ -838,7 +838,7 @@ void initialize_app() {
 	ui::TextInputState& input_state = s_app.search_input_state;
 	input_state.buffer = Span(arena_alloc_array<wchar_t>(s_app.arena, INPUT_BUFFER_SIZE), INPUT_BUFFER_SIZE);
 
-	ui::initialize(*s_app.window);
+	ui::initialize(*s_app.window, s_app.arena);
 	ui::set_theme(theme);
 
 	ui::Options& options = ui::get_options();

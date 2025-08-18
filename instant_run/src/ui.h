@@ -112,7 +112,7 @@ inline void text_input_state_clear(TextInputState& state) {
 	state.text_length = 0;
 }
 
-void initialize(const Window& window);
+void initialize(const Window& window, Arena& arena);
 
 void begin_frame();
 void end_frame();

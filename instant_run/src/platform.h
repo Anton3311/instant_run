@@ -26,6 +26,9 @@ enum class WindowEventKind {
 	MouseReleased,
 	Key,
 	CharTyped,
+
+	// This event has no data
+	FocusLost,
 };
 
 enum class InputAction {

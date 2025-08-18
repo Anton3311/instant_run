@@ -381,9 +381,7 @@ void window_focus(Window* window) {
 	}
 
 	if (!SetForegroundWindow(window->handle)) {
-		std::cout << "Failed to set foreground window: ";
-		platform_log_error_message();
-		std::cout << '\n';
+		log_error("Failed to set foreground window");
 		return;
 	}
 
@@ -630,6 +628,14 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 	case WM_SYSCOMMAND:
 		if ((wParam & 0xFFF0) == SC_KEYMENU) {
 			return 0;
+		}
+		break;
+	case WM_KILLFOCUS:
+		if (window->event_count < EVENT_BUFFER_SIZE) {
+			WindowEvent& event = window->events[window->event_count];
+			window->event_count++;
+
+			event.kind = WindowEventKind::FocusLost;
 		}
 		break;
 	case WM_CLOSE:

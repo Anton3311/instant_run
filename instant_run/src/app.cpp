@@ -940,6 +940,9 @@ void run_app_frame() {
 	Span<const WindowEvent> events = window_get_events(s_app.window);
 	for (size_t i = 0; i < events.count; i++) {
 		switch (events[i].kind) {
+		case WindowEventKind::FocusLost:
+			s_app.state = AppState::Sleeping;
+			break;
 		case WindowEventKind::Key: {
 			auto& key_event = events[i].data.key;
 			if (key_event.action == InputAction::Pressed) {

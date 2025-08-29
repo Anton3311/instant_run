@@ -198,4 +198,4 @@ enum class RunFileResult {
 	OtherError,
 };
 
-RunFileResult run_file(const std::filesystem::path& path, bool run_as_admin);
+RunFileResult platform_run_file(const std::filesystem::path& path, bool run_as_admin);

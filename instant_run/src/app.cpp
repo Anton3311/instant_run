@@ -929,6 +929,32 @@ bool resolve_uri_file_path(std::wstring_view uri, std::wstring_view* result) {
 	return true;
 }
 
+struct EntryLaunchParams {
+	bool as_admin;
+	Entry entry;
+};
+
+// Reposible for freing the `EntryLaunchParams`
+void launch_app_task(const JobContext& context, void* data) {
+	PROFILE_FUNCTION();
+	EntryLaunchParams* params = reinterpret_cast<EntryLaunchParams*>(data);
+
+	if (params->as_admin) {
+		// NOTE: No support for launching MS store apps with admin rights
+		if (!params->entry.is_microsoft_store_app) {
+			platform_run_file(params->entry.path, true);
+		}
+	} else {
+		if (params->entry.is_microsoft_store_app) {
+			platform_launch_installed_app(params->entry.id);
+		} else {
+			platform_run_file(params->entry.path, false);
+		}
+	}
+
+	delete params;
+}
+
 void run_app_frame() {
 	PROFILE_FUNCTION();
 
@@ -1056,23 +1082,16 @@ void run_app_frame() {
 		case EntryAction::None:
 			break;
 		case EntryAction::Launch:
-			if (entry.is_microsoft_store_app) {
-				platform_launch_installed_app(entry.id);
-				s_app.state = AppState::Sleeping;
-				clear_search_result();
-			} else {
-				run_file(entry.path, false);
-				s_app.state = AppState::Sleeping;
-				clear_search_result();
-			}
+		case EntryAction::LaunchAsAdmin: {
+			EntryLaunchParams* params = new EntryLaunchParams();
+			params->as_admin = action == EntryAction::LaunchAsAdmin;
+			params->entry = entry;
+			job_system_submit(launch_app_task, params);
+
+			s_app.state = AppState::Sleeping;
+			clear_search_result();
 			break;
-		case EntryAction::LaunchAsAdmin:
-			if (!entry.is_microsoft_store_app) {
-				run_file(entry.path, true);
-				s_app.state = AppState::Sleeping;
-				clear_search_result();
-			}
-			break;
+		}
 		case EntryAction::CopyPath:
 			// path is not available for imicrosoft store apps
 			if (!entry.is_microsoft_store_app) {

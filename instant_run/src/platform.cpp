@@ -1451,7 +1451,7 @@ static RunFileResult run_executable_file(const std::filesystem::path& path) {
 	return result ? RunFileResult::Ok : RunFileResult::OtherError;
 }
 
-RunFileResult run_file(const std::filesystem::path& path, bool run_as_admin) {
+RunFileResult platform_run_file(const std::filesystem::path& path, bool run_as_admin) {
 	PROFILE_FUNCTION();
 
 	if (!std::filesystem::exists(path)) {

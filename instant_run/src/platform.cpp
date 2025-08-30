@@ -112,6 +112,17 @@ void platform_shutdown_thread() {
 	CoUninitialize();
 }
 
+void platform_set_this_thread_affinity_mask(uint64_t mask) {
+	PROFILE_FUNCTION();
+
+	HANDLE this_thread = GetCurrentThread();
+	DWORD_PTR result = SetThreadAffinityMask(this_thread, (DWORD_PTR)mask);
+
+	if (!result) {
+		platform_log_error_message();
+	}
+}
+
 void platform_log_error_message() {
 	PROFILE_FUNCTION();
 

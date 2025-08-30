@@ -103,6 +103,8 @@ void platform_shutdown();
 void platform_initialize_thread();
 void platform_shutdown_thread();
 
+void platform_set_this_thread_affinity_mask(uint64_t mask);
+
 void platform_log_error_message();
 
 typedef void* ModuleHandle;

@@ -57,19 +57,14 @@ static bool try_execute_single_task(JobContext& context) {
 		return false;
 	}
 
-	log_info("acquired task");
-
 	s_job_sys_state.active_worker_count.fetch_add(1, std::memory_order::acquire);
 
 	{
-		PROFILE_SCOPE("execute_task");
 		context.batch_size = task.batch_size;
 		task.task_func(context, task.user_data);
 	}
 
 	s_job_sys_state.active_worker_count.fetch_sub(1, std::memory_order::acquire);
-
-	log_info("completed task");
 
 	return true;
 }
@@ -91,6 +86,7 @@ static void thread_worker(uint32_t index) {
 	log_info("worker started");
 
 	platform_initialize_thread();
+	platform_set_this_thread_affinity_mask(1 << index);
 
 	while (true) {
 		bool is_running = s_job_sys_state.is_running.load(std::memory_order::relaxed);

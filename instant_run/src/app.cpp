@@ -140,53 +140,9 @@ Rect get_icon_rect(const ApplicationIconsStorage& storage, UVec2 icon_position) 
 	return uv_rect;
 }
 
-bool starts_with(std::wstring_view string, std::wstring_view start_pattern) {
-	PROFILE_FUNCTION();
-	if (string.length() < start_pattern.length()) {
-		return false;
-	}
-
-	size_t min_length = std::min(string.length(), start_pattern.length());
-	for (size_t i = 0; i < min_length; i++) {
-		if (string[i] != start_pattern[i]) {
-			return false;
-		}
-	}
-
-	return true;
-}
-
-uint32_t dp[100][100];
-uint32_t compute_edit_distance(const std::wstring_view& string, const std::wstring_view& pattern) {
-	PROFILE_FUNCTION();
-	std::memset(dp, 0, sizeof(dp));
-
-	for (size_t i = 0; i <= string.size(); i++)
-		dp[i][0] = i;
-
-	for (size_t i = 0; i <= pattern.size(); i++)
-		dp[0][i] = i;
-
-	for (size_t j = 1; j <= pattern.size(); j++) {
-		for (size_t i = 1; i <= string.size(); i++) {
-			uint32_t substitution_cost;
-
-			if (string[i - 1] == pattern[j - 1]) {
-				substitution_cost = 0;
-			} else {
-				substitution_cost = 1;
-			}
-
-			uint32_t deletion = dp[i - 1][j] + 1 + 2;
-			uint32_t insertion = dp[i][j - 1] + 1;
-			uint32_t substitution = dp[i - 1][j - 1] + substitution_cost;
-
-			dp[i][j] = std::min(substitution, std::min(deletion, insertion));
-		}
-	}
-
-	return dp[string.size()][pattern.size()];
-}
+//
+// Searching
+//
 
 // FIXME: Don't hardcode uppercase ranges
 inline wchar_t to_lower_case(wchar_t c) {
@@ -207,190 +163,6 @@ inline wchar_t to_lower_case(wchar_t c) {
 	}
 
 	return c;
-}
-
-uint32_t compute_longest_common_substring(
-		const std::wstring_view& string,
-		const std::wstring_view& pattern,
-		std::vector<RangeU32>& sequence_ranges,
-		RangeU32& highlight_range) {
-	PROFILE_FUNCTION();
-	if (string.length() < pattern.length()) {
-		return 0;
-	}
-
-	uint32_t result = 0;
-
-	highlight_range.start = static_cast<uint32_t>(sequence_ranges.size());
-
-	for (size_t i = 0; i < (string.length() - pattern.length() + 1); i++) {
-		uint32_t sequence_length = 0;
-
-		for (size_t j = 0; j < pattern.size(); j++) {
-			if (to_lower_case(string[i + j]) == to_lower_case(pattern[j])) {
-				sequence_length += 1;
-			} else {
-				break;
-			}
-		}
-
-		if (sequence_length > 0) {
-			sequence_ranges.push_back(RangeU32 { static_cast<uint32_t>(i), sequence_length });
-
-			highlight_range.count += 1;
-		}
-
-		result = std::max(result, sequence_length);
-	}
-
-	return result;
-}
-
-enum class LCSDirection : uint16_t {
-	None,
-	Diagonal,
-	Horizontal,
-	Vertical
-};
-
-struct LCSCell {
-	uint16_t value;
-	LCSDirection direction;
-};
-
-uint32_t compute_longest_common_subsequence(
-		const std::wstring_view& string,
-		const std::wstring_view& pattern,
-		std::vector<RangeU32>& sequence_ranges,
-		RangeU32& highlight_range,
-		Arena& arena) {
-	PROFILE_FUNCTION();
-
-	if (string.length() == 0 || pattern.length() == 0) {
-		return 0;
-	}
-
-	ArenaSavePoint temp_region = arena_begin_temp(arena);
-
-	size_t grid_width = pattern.length() + 1;
-	size_t grid_height = string.length() + 1;
-	LCSCell* cells = arena_alloc_array<LCSCell>(arena, grid_width * grid_height);
-
-	for (size_t x = 0; x < grid_width; x++) {
-		cells[x] = LCSCell {};
-	}
-
-	for (size_t y = 0; y < grid_height; y++) {
-		cells[y * grid_width] = LCSCell {};
-	}
-
-	highlight_range.start = static_cast<uint32_t>(sequence_ranges.size());
-
-	for (size_t y = 1; y <= string.length(); y++) {
-		for (size_t x = 1; x <= pattern.length(); x++) {
-			LCSCell& current_cell = cells[y * grid_width + x];
-	
-			wchar_t string_char = to_lower_case(string[y - 1]);
-			wchar_t pattern_char = to_lower_case(pattern[x - 1]);
-			if (string_char == pattern_char) {
-				 current_cell = LCSCell {
-					.value = (uint16_t)(cells[(y - 1) * grid_width + x - 1].value + 1),
-					.direction = LCSDirection::Diagonal
-				};
-			} else {
-				LCSCell& horizontal = cells[y * grid_width + x - 1];
-				LCSCell& vertical = cells[(y - 1) * grid_width + x];
-
-				if (horizontal.value >= vertical.value) {
-					current_cell = LCSCell {
-						.value = horizontal.value,
-						.direction = LCSDirection::Horizontal
-					};
-				} else {
-					current_cell = LCSCell {
-						.value = vertical.value,
-						.direction = LCSDirection::Vertical
-					};
-				}
-			}
-		}
-	}
-	
-	uint16_t similarity_score = cells[(grid_height - 1) * grid_width + (grid_width - 1)].value;
-	uint16_t longest_substr_score = 0;
-
-	// Generate highlight ranges
-	{
-		PROFILE_SCOPE("Generate highlight ranges");
-		struct BacktrackEntry {
-			LCSDirection direction;
-			uint32_t y;
-		};
-
-		// Preallocate for the worst case
-		size_t backtrack_buffer_size = grid_width * grid_height - 1;
-		BacktrackEntry* backtrack = arena_alloc_array<BacktrackEntry>(arena, backtrack_buffer_size);
-		// NOTE: It is off by 1 in order to avoid an overflow.
-		// 	     It points to the first valid entry staring from the left.
-		size_t backtrack_insert_index = backtrack_buffer_size;
-
-		UVec2 position = UVec2 { (uint32_t)(grid_width - 1), (uint32_t)(grid_height - 1) };
-		while (true) {
-			LCSCell& cell = cells[position.y * grid_width + position.x];
-
-			if (cell.direction == LCSDirection::None) {
-				break;
-			}
-
-			backtrack[backtrack_insert_index - 1] = BacktrackEntry { .direction = cell.direction, .y = position.y - 1 };
-			backtrack_insert_index -= 1;
-
-			switch (cell.direction) {
-			case LCSDirection::Vertical:
-				position.y -= 1;
-				break;
-			case LCSDirection::Horizontal:
-				position.x -= 1;
-				break;
-			case LCSDirection::Diagonal:
-				position.x -= 1;
-				position.y -= 1;
-				break;
-			case LCSDirection::None:
-				break;
-			}
-		}
-
-		RangeU32 range{};
-		for (size_t i = backtrack_insert_index; i < backtrack_buffer_size; i++) {
-			if (backtrack[i].direction == LCSDirection::Diagonal) {
-				if (range.count == 0) {
-					range.start = backtrack[i].y;
-					range.count = 1;
-				} else {
-					range.count += 1;
-				}
-			} else {
-				if (range.count != 0) {
-					sequence_ranges.push_back(range);
-					longest_substr_score = max(longest_substr_score, (uint16_t)range.count);
-					highlight_range.count += 1;
-
-					range.count = 0;
-				}
-			}
-		}
-
-		if (range.count > 0) {
-			sequence_ranges.push_back(range);
-			longest_substr_score = max(longest_substr_score, (uint16_t)range.count);
-			highlight_range.count += 1;
-		}
-	}
-
-	arena_end_temp(temp_region);
-
-	return (uint32_t)similarity_score << 16 | (uint32_t)longest_substr_score;
 }
 
 uint32_t compute_search_score(std::wstring_view string,
@@ -460,6 +232,10 @@ void update_search_result(std::wstring_view search_pattern,
 		return a.score > b.score;
 	});
 }
+
+//
+// Result View
+//
 
 enum class EntryAction {
 	None,
@@ -617,25 +393,6 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	return action;
 }
 
-void append_entry(std::vector<Entry>& entries, const std::filesystem::path& path) {
-	PROFILE_FUNCTION();
-	
-	Entry& entry = entries.emplace_back();
-	entry.name = path.filename().replace_extension("").wstring();
-	entry.path = path;
-}
-
-void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entries) {
-	PROFILE_FUNCTION();
-	for (std::filesystem::path child : std::filesystem::directory_iterator(path)) {
-		if (std::filesystem::is_directory(child)) {
-			walk_directory(child, entries);
-		} else {
-			append_entry(entries, child);
-		}
-	}
-}
-
 void process_result_view_key_event(ResultViewState& state, KeyCode key) {
 	size_t result_count = state.matches.size();
 
@@ -664,19 +421,6 @@ void update_result_view_scroll(ResultViewState& state) {
 	} else if (state.selected_index < state.scroll_offset) {
 		state.scroll_offset = state.selected_index;
 	}
-}
-
-static constexpr float ICON_SIZE = 32.0f;
-
-Rect create_icon(UVec2 position, const Texture& texture) {
-
-	float x = ((float)position.x * ICON_SIZE) / (float)texture.width;
-	float y = ((float)position.y * ICON_SIZE) / (float)texture.height;
-
-	float icon_width_uv = ICON_SIZE / (float)texture.width;
-	float icon_height_uv = ICON_SIZE / (float)texture.height;
-
-	return Rect { Vec2 { x, y }, Vec2 { x + icon_width_uv, y + icon_height_uv } };
 }
 
 void try_load_app_entry_icon(ApplicationIconsStorage& app_icon_storage, Entry& entry, Arena& arena) {
@@ -755,6 +499,10 @@ void enter_sleep_mode() {
 	wait_for_activation();
 }
 
+//
+// Keyboard Hook
+//
+
 bool init_keyboard_hook(Arena& allocator) {
 	PROFILE_FUNCTION();
 	HookConfig config{};
@@ -768,73 +516,9 @@ void shutdown_keyboard_hook() {
 	keyboard_hook_shutdown(s_app.keyboard_hook);
 }
 
-void initialize_app() {
-	PROFILE_FUNCTION();
-	s_app.window = window_create(800, 500, L"Instant Run");
-
-	initialize_renderer(s_app.window);
-	initialize_app_icon_storage(s_app.app_icon_storage, 32, 32);
-
-	Icons& icons = s_app.icons;
-	load_texture("./assets/icons.png", icons.texture);
-	icons.search = create_icon(UVec2 { 0, 0 }, icons.texture);
-	icons.close = create_icon(UVec2 { 1, 0 }, icons.texture);
-	icons.enter = create_icon(UVec2 { 2, 0 }, icons.texture);
-	icons.nav = create_icon(UVec2 { 3, 0 }, icons.texture);
-	icons.run = create_icon(UVec2 { 0, 1 }, icons.texture);
-	icons.run_as_admin = create_icon(UVec2 { 1, 1 }, icons.texture);
-	icons.copy = create_icon(UVec2 { 2, 1 }, icons.texture);
-
-	s_app.font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f, s_app.arena);
-
-	ui::Theme theme{};
-	theme.default_font = &s_app.font;
-	theme.window_background = color_from_hex(0x242222FF);
-
-	theme.widget_color = color_from_hex(0x242222FF);
-	// NOTE: hovered_color & pressed_color are the same
-	theme.widget_hovered_color = color_from_hex(0x37373AFF);
-	theme.widget_pressed_color = color_from_hex(0x37373AFF);
-
-	// NOTE: hovered_color & pressed_color are the same
-	theme.default_button_style.color = color_from_hex(0x242222FF);
-	theme.default_button_style.hovered_color = color_from_hex(0x37373AFF);
-	theme.default_button_style.pressed_color = color_from_hex(0x37373AFF);
-
-	theme.default_button_style.content_color = color_from_hex(0x9E9E9EFF);
-	theme.default_button_style.content_hovered_color = WHITE;
-	theme.default_button_style.content_pressed_color = color_from_hex(0x9E9E9EFF);
-
-	theme.separator_color = color_from_hex(0x37373AFF);
-	theme.text_color = WHITE;
-	theme.prompt_text_color = color_from_hex(0x9E9E9EFF);
-	theme.default_layout_config.item_spacing = 8.0f;
-	theme.default_layout_config.padding = Vec2 { 12.0f, 12.0f };
-	theme.frame_padding = Vec2 { 12.0f, 8.0f };
-	theme.frame_corner_radius = 4.0f;
-
-	theme.icon_size = ICON_SIZE;
-	theme.icon_color = theme.prompt_text_color;
-	theme.icon_hovered_color = WHITE;
-	theme.icon_pressed_color = theme.prompt_text_color;
-
-	s_app.highlight_color = color_from_hex(0xE6A446FF);
-
-	constexpr size_t INPUT_BUFFER_SIZE = 128;
-	ui::TextInputState& input_state = s_app.search_input_state;
-	input_state.buffer = Span(arena_alloc_array<wchar_t>(s_app.arena, INPUT_BUFFER_SIZE), INPUT_BUFFER_SIZE);
-
-	ui::initialize(*s_app.window, s_app.arena);
-	ui::set_theme(theme);
-
-	ui::Options& options = ui::get_options();
-#ifdef BUILD_DEV
-	options.debug_layout_overflow = true;
-#endif
-
-	s_app.state = AppState::Sleeping;
-	s_app.wait_for_window_events = false;
-}
+//
+// Search Entries
+//
 
 void resolve_shortcuts_task(const JobContext& context, void* data) {
 	PROFILE_FUNCTION();
@@ -843,6 +527,19 @@ void resolve_shortcuts_task(const JobContext& context, void* data) {
 	for (Entry& entry : entries) {
 		if (entry.path.extension() == ".lnk") {
 			entry.path = fs_resolve_shortcut(entry.path);
+		}
+	}
+}
+
+void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entries) {
+	PROFILE_FUNCTION();
+	for (std::filesystem::path child : std::filesystem::directory_iterator(path)) {
+		if (std::filesystem::is_directory(child)) {
+			walk_directory(child, entries);
+		} else {
+			Entry& entry = entries.emplace_back();
+			entry.name = child.filename().replace_extension("").wstring();
+			entry.path = child;
 		}
 	}
 }
@@ -915,23 +612,9 @@ void clear_search_result() {
 	update_search_result({}, s_app.entries, s_app.result_view_state.matches, s_app.result_view_state.highlights, s_app.arena);
 }
 
-bool resolve_uri_file_path(std::wstring_view uri, std::wstring_view* result) {
-	PROFILE_FUNCTION();
-	std::wstring_view uri_file = L"file:///";
-
-	if (uri.length() < uri_file.length()) {
-		return false;
-	}
-
-	for (size_t i = 0; i < uri_file.length(); i++) {
-		if (uri_file[i] != uri[i]) {
-			return false;
-		}
-	}
-
-	*result = uri.substr(uri_file.length());
-	return true;
-}
+//
+// Application Launching
+//
 
 struct EntryLaunchParams {
 	bool as_admin;
@@ -957,6 +640,91 @@ void launch_app_task(const JobContext& context, void* data) {
 	}
 
 	delete params;
+}
+
+//
+// Application Logic
+//
+
+static constexpr float ICON_SIZE = 32.0f;
+
+Rect create_icon(UVec2 position, const Texture& texture) {
+
+	float x = ((float)position.x * ICON_SIZE) / (float)texture.width;
+	float y = ((float)position.y * ICON_SIZE) / (float)texture.height;
+
+	float icon_width_uv = ICON_SIZE / (float)texture.width;
+	float icon_height_uv = ICON_SIZE / (float)texture.height;
+
+	return Rect { Vec2 { x, y }, Vec2 { x + icon_width_uv, y + icon_height_uv } };
+}
+
+void initialize_app() {
+	PROFILE_FUNCTION();
+	s_app.window = window_create(800, 500, L"Instant Run");
+
+	initialize_renderer(s_app.window);
+	initialize_app_icon_storage(s_app.app_icon_storage, 32, 32);
+
+	Icons& icons = s_app.icons;
+	load_texture("./assets/icons.png", icons.texture);
+	icons.search = create_icon(UVec2 { 0, 0 }, icons.texture);
+	icons.close = create_icon(UVec2 { 1, 0 }, icons.texture);
+	icons.enter = create_icon(UVec2 { 2, 0 }, icons.texture);
+	icons.nav = create_icon(UVec2 { 3, 0 }, icons.texture);
+	icons.run = create_icon(UVec2 { 0, 1 }, icons.texture);
+	icons.run_as_admin = create_icon(UVec2 { 1, 1 }, icons.texture);
+	icons.copy = create_icon(UVec2 { 2, 1 }, icons.texture);
+
+	s_app.font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f, s_app.arena);
+
+	ui::Theme theme{};
+	theme.default_font = &s_app.font;
+	theme.window_background = color_from_hex(0x242222FF);
+
+	theme.widget_color = color_from_hex(0x242222FF);
+	// NOTE: hovered_color & pressed_color are the same
+	theme.widget_hovered_color = color_from_hex(0x37373AFF);
+	theme.widget_pressed_color = color_from_hex(0x37373AFF);
+
+	// NOTE: hovered_color & pressed_color are the same
+	theme.default_button_style.color = color_from_hex(0x242222FF);
+	theme.default_button_style.hovered_color = color_from_hex(0x37373AFF);
+	theme.default_button_style.pressed_color = color_from_hex(0x37373AFF);
+
+	theme.default_button_style.content_color = color_from_hex(0x9E9E9EFF);
+	theme.default_button_style.content_hovered_color = WHITE;
+	theme.default_button_style.content_pressed_color = color_from_hex(0x9E9E9EFF);
+
+	theme.separator_color = color_from_hex(0x37373AFF);
+	theme.text_color = WHITE;
+	theme.prompt_text_color = color_from_hex(0x9E9E9EFF);
+	theme.default_layout_config.item_spacing = 8.0f;
+	theme.default_layout_config.padding = Vec2 { 12.0f, 12.0f };
+	theme.frame_padding = Vec2 { 12.0f, 8.0f };
+	theme.frame_corner_radius = 4.0f;
+
+	theme.icon_size = ICON_SIZE;
+	theme.icon_color = theme.prompt_text_color;
+	theme.icon_hovered_color = WHITE;
+	theme.icon_pressed_color = theme.prompt_text_color;
+
+	s_app.highlight_color = color_from_hex(0xE6A446FF);
+
+	constexpr size_t INPUT_BUFFER_SIZE = 128;
+	ui::TextInputState& input_state = s_app.search_input_state;
+	input_state.buffer = Span(arena_alloc_array<wchar_t>(s_app.arena, INPUT_BUFFER_SIZE), INPUT_BUFFER_SIZE);
+
+	ui::initialize(*s_app.window, s_app.arena);
+	ui::set_theme(theme);
+
+	ui::Options& options = ui::get_options();
+#ifdef BUILD_DEV
+	options.debug_layout_overflow = true;
+#endif
+
+	s_app.state = AppState::Sleeping;
+	s_app.wait_for_window_events = false;
 }
 
 void run_app_frame() {

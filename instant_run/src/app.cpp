@@ -544,56 +544,57 @@ void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entri
 	}
 }
 
-void initialize_search_entries(Arena& arena) {
+struct SearchEntriesQuery {
+	InstalledAppsQueryState* installed_apps_query;
+};
+
+void schedule_search_entries_query(Arena& arena, SearchEntriesQuery& query_state) {
 	PROFILE_FUNCTION();
 
-	{
-		std::vector<std::filesystem::path> known_folders = get_user_folders(
-				UserFolderKind::Desktop | UserFolderKind::StartMenu | UserFolderKind::Programs);
+	std::vector<std::filesystem::path> known_folders = get_user_folders(
+			UserFolderKind::Desktop | UserFolderKind::StartMenu | UserFolderKind::Programs);
 
-		for (const auto& known_folder : known_folders) {
-			try {
-				walk_directory(known_folder, s_app.entries);
-			} catch (std::exception e) {
-				log_error(e.what());
-			}
+	for (const auto& known_folder : known_folders) {
+		try {
+			walk_directory(known_folder, s_app.entries);
+		} catch (std::exception e) {
+			log_error(e.what());
 		}
 	}
 
 	job_system_submit(resolve_shortcuts_task, s_app.entries.data(), s_app.entries.size());
 
-	InstalledAppsQueryState* installed_apps_query = platform_begin_installed_apps_query(arena);
+	query_state.installed_apps_query = platform_begin_installed_apps_query(arena);
+}
+
+void collect_search_entries_query_result(Arena& arena, SearchEntriesQuery& query_state) {
+	PROFILE_FUNCTION();
 
 	job_system_wait_for_all(arena);
 	
-	{
-		PROFILE_SCOPE("query_installed_apps");
-		std::vector<InstalledAppDesc> installed_apps = platform_finish_installed_apps_query(
-				installed_apps_query,
-				arena);
+	std::vector<InstalledAppDesc> installed_apps = platform_finish_installed_apps_query(
+			query_state.installed_apps_query,
+			arena);
 
-		// TODO: reserve entries
-		for (const auto& app_desc : installed_apps) {
-			Entry& entry = s_app.entries.emplace_back();
-			entry.name = app_desc.display_name;
-			entry.is_microsoft_store_app = true;
-			entry.icon = INVALID_ICON_POSITION;
-			entry.id = app_desc.id;
+	// TODO: reserve entries
+	for (const auto& app_desc : installed_apps) {
+		Entry& entry = s_app.entries.emplace_back();
+		entry.name = app_desc.display_name;
+		entry.is_microsoft_store_app = true;
+		entry.icon = INVALID_ICON_POSITION;
+		entry.id = app_desc.id;
 
-			TexturePixelData data = texture_load_pixel_data(app_desc.logo_uri);
-			if (data.pixels) {
-				ArenaSavePoint temp = arena_begin_temp(arena);
-				TexturePixelData downsampled = texture_downscale(data, 32, s_app.arena);
+		TexturePixelData data = texture_load_pixel_data(app_desc.logo_uri);
+		if (data.pixels) {
+			ArenaSavePoint temp = arena_begin_temp(arena);
+			TexturePixelData downsampled = texture_downscale(data, 32, s_app.arena);
 
-				entry.icon = store_app_icon(s_app.app_icon_storage, downsampled.pixels);
+			entry.icon = store_app_icon(s_app.app_icon_storage, downsampled.pixels);
 
-				texture_release_pixel_data(data);
-				arena_end_temp(temp);
-			}
+			texture_release_pixel_data(data);
+			arena_end_temp(temp);
 		}
 	}
-
-	job_system_wait_for_all(arena);
 
 	{
 		ArenaSavePoint temp = arena_begin_temp(arena);
@@ -913,6 +914,9 @@ int run_app(CommandLineArgs cmd_args) {
 
 	platform_initialize();
 
+	SearchEntriesQuery search_entries_query{};
+	schedule_search_entries_query(s_app.arena, search_entries_query);
+
 	if (s_app.use_keyboard_hook) {
 		init_keyboard_hook(s_app.arena);
 	} else {
@@ -920,11 +924,12 @@ int run_app(CommandLineArgs cmd_args) {
 	}
 
 	initialize_app();
-	initialize_search_entries(s_app.arena);
+	window_hide(s_app.window);
+
+	// At this point the search entry must be made available
+	collect_search_entries_query_result(s_app.arena, search_entries_query);
 
 	clear_search_result();
-
-	window_hide(s_app.window);
 
 	{
 		wait_for_activation();

@@ -1285,7 +1285,6 @@ SystemIconHandle fs_query_file_icon(const std::filesystem::path& path) {
 	SHFILEINFO file_info{};
 	DWORD_PTR result = SHGetFileInfoW(path.c_str(), 0, &file_info, sizeof(file_info), SHGFI_ICON);
 	if (result == 0) {
-		platform_log_error_message();
 		return nullptr;
 	}
 
@@ -1302,7 +1301,6 @@ uint32_t fs_query_file_icon_id(const std::filesystem::path& path) {
 	SHFILEINFO file_info{};
 	DWORD_PTR result = SHGetFileInfoW(path.c_str(), 0, &file_info, sizeof(file_info), SHGFI_SYSICONINDEX);
 	if (result == 0) {
-		platform_log_error_message();
 		return INVALID_ICON_ID;
 	}
 

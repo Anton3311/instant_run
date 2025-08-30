@@ -1182,25 +1182,32 @@ bool platform_launch_installed_app(const wchar_t* app_id) {
 	PROFILE_FUNCTION();
 
 	IApplicationActivationManager* activation_manager = nullptr;
-	HRESULT result = CoCreateInstance(__uuidof(ApplicationActivationManager),
-			nullptr,
-			CLSCTX_INPROC_SERVER,
-			__uuidof(IApplicationActivationManager),
-			(LPVOID*)(&activation_manager));
 
-	if (FAILED(result)) {
-		log_error("failed to create 'IApplicationActivationManager'");
-		return false;
+	{
+		PROFILE_SCOPE("create activation manager");
+		HRESULT result = CoCreateInstance(__uuidof(ApplicationActivationManager),
+				nullptr,
+				CLSCTX_INPROC_SERVER,
+				__uuidof(IApplicationActivationManager),
+				(LPVOID*)(&activation_manager));
+
+		if (FAILED(result)) {
+			log_error("failed to create 'IApplicationActivationManager'");
+			return false;
+		}
 	}
 
 	DWORD process_id = 0;
-	result = activation_manager->ActivateApplication(app_id, nullptr, AO_NONE, &process_id);
+	HRESULT result = activation_manager->ActivateApplication(app_id, nullptr, AO_NONE, &process_id);
 	if (FAILED(result)) {
 		log_error("failed to launch installed app");
 		return false;
 	}
 
-	activation_manager->Release();
+	{
+		PROFILE_SCOPE("release activation manager");
+		activation_manager->Release();
+	}
 
 	return true;
 }

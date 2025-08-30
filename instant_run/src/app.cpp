@@ -17,12 +17,14 @@
 static constexpr UVec2 INVALID_ICON_POSITION = UVec2 { UINT32_MAX, UINT32_MAX };
 
 struct ApplicationIconsStorage {
+	using IconId = void*;
+
 	Texture texture;
 	uint32_t icon_size;
 	uint32_t write_offset;
 	uint32_t grid_size;
 
-	std::unordered_map<size_t, UVec2> ext_to_icon;
+	std::unordered_map<IconId, UVec2> ext_to_icon;
 };
 
 struct Icons {
@@ -39,6 +41,8 @@ struct Icons {
 struct Entry {
 	std::wstring name;
 	std::filesystem::path path;
+
+	bool icon_is_loaded;
 	UVec2 icon;
 
 	const wchar_t* id;
@@ -682,50 +686,39 @@ Rect create_icon(UVec2 position, const Texture& texture) {
 	return Rect { Vec2 { x, y }, Vec2 { x + icon_width_uv, y + icon_height_uv } };
 }
 
-void load_application_icons(std::vector<Entry>& entries, ApplicationIconsStorage& app_icon_storage, Arena& arena) {
+void try_load_app_entry_icon(ApplicationIconsStorage& app_icon_storage, Entry& entry, Arena& arena) {
 	PROFILE_FUNCTION();
-
-	for (auto& entry : entries) {
-		bool is_shortcut = false;
-
-		std::filesystem::path resolved_path;
-
-		if (entry.path.extension() == ".lnk") {
-			is_shortcut = true;
-			resolved_path = read_shortcut_path(entry.path);
-
-			if (!std::filesystem::exists(resolved_path)) {
-				continue;
-			}
-		}
-
-		std::filesystem::path& entry_path = is_shortcut ? resolved_path : entry.path;
-
-		uint32_t icon_id = fs_query_file_icon_id(entry_path);
-
-		auto it = app_icon_storage.ext_to_icon.find(icon_id);
-		if (it != app_icon_storage.ext_to_icon.end()) {
-			entry.icon = it->second;
-			continue;
-		}
-
-		SystemIconHandle icon_handle = fs_query_file_icon(entry_path);
-		if (!icon_handle) {
-			continue;
-		}
-
-		ArenaSavePoint temp_region = arena_begin_temp(arena);
-		Bitmap bitmap = fs_extract_icon_bitmap(icon_handle, arena);
-		if (bitmap.pixels) {
-			UVec2 icon = store_app_icon(app_icon_storage, bitmap.pixels);
-			app_icon_storage.ext_to_icon.emplace(icon_id, icon);
-			entry.icon = icon;
-		}
-
-		fs_release_file_icon(icon_handle);
-
-		arena_end_temp(temp_region);
+	if (entry.icon_is_loaded) {
+		return;
 	}
+
+	SystemIconHandle icon_handle = fs_query_file_icon(entry.path);
+	ApplicationIconsStorage::IconId icon_id = icon_handle;
+
+	if (!icon_handle) {
+		entry.icon_is_loaded = true; // loaded but invalid
+		return;
+	}
+
+	auto it = app_icon_storage.ext_to_icon.find(icon_id);
+	if (it != app_icon_storage.ext_to_icon.end()) {
+		entry.icon = it->second;
+		entry.icon_is_loaded = true;
+		return;
+	}
+
+	ArenaSavePoint temp_region = arena_begin_temp(arena);
+	Bitmap bitmap = fs_extract_icon_bitmap(icon_handle, arena);
+	if (bitmap.pixels) {
+		UVec2 icon = store_app_icon(app_icon_storage, bitmap.pixels);
+		app_icon_storage.ext_to_icon.emplace(icon_id, icon);
+		entry.icon = icon;
+	}
+
+	fs_release_file_icon(icon_handle);
+
+	arena_end_temp(temp_region);
+	entry.icon_is_loaded = true;
 }
 
 void enable_app() {
@@ -865,8 +858,6 @@ void initialize_search_entries(Arena& arena) {
 			}
 		}
 	}
-
-	load_application_icons(s_app.entries, s_app.app_icon_storage, s_app.arena);
 	
 	{
 		PROFILE_SCOPE("query_installed_apps");
@@ -1064,7 +1055,11 @@ void run_app_frame() {
 		bool is_selected = i == result_view_state.selected_index;
 
 		const ResultEntry& match = s_app.result_view_state.matches[i];
-		const Entry& entry = s_app.entries[match.entry_index];
+		Entry& entry = s_app.entries[match.entry_index];
+
+		if (!entry.icon_is_loaded) {
+			try_load_app_entry_icon(s_app.app_icon_storage, entry, s_app.arena);
+		}
 
 		EntryAction action = draw_result_entry(match,
 				entry,

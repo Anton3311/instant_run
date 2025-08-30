@@ -258,8 +258,7 @@ void begin_frame() {
 			s_ui_state.has_typed_char = true;
 			s_ui_state.typed_char = events[i].data.char_typed.c;
 			break;
-		case WindowEventKind::Key:
-			// TODO: Handle
+		default:
 			break;
 		}
 	}
@@ -302,48 +301,86 @@ float get_default_font_height() {
 }
 
 Vec2 compute_text_size(const Font& font, std::wstring_view text, float max_width) {
+	Vec2 total_size = {};
+	compute_text_size(font, &text, &total_size, 1, max_width);
+	return total_size;
+}
+
+Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2* sizes, size_t string_count, float max_width) {
 	PROFILE_FUNCTION();
 
-	Vec2 char_position{};
-	float text_width = 0.0f;
+	const float scale = stbtt_ScaleForPixelHeight(&font.info, font.size);
+	const float font_height = font_get_height(font);
 
-	float scale = stbtt_ScaleForPixelHeight(&font.info, font.size);
+	float total_text_width = 0.0f;
 
-	for (size_t i = 0; i < text.size(); i++) {
-		uint32_t c = text[i];
-		uint32_t glyph_index = font_get_glyph_index(font, c);
-		if (glyph_index == UINT32_MAX) {
-			continue;
+	for (size_t string_index = 0; string_index < string_count; string_index++) {
+		std::wstring_view text = strings[string_index];
+
+		Vec2 char_position = {};
+		float text_width = 0.0f;
+
+		for (size_t i = 0; i < text.size(); i++) {
+			uint32_t c = text[i];
+			uint32_t glyph_index = font_get_glyph_index(font, c);
+			if (glyph_index == UINT32_MAX) {
+				continue;
+			}
+
+			float previous_char_x = char_position.x;
+
+			stbtt_aligned_quad quad{};
+			stbtt_GetBakedQuad(font.glyphs,
+					font.atlas.width,
+					font.atlas.height,
+					glyph_index,
+					&char_position.x,
+					&char_position.y,
+					&quad,
+					1);
+
+			if (char_position.x > max_width) {
+				// Revert the last char changes
+				char_position.x = previous_char_x;
+				break;
+			}
+
+			int32_t kerning_advance = 0;
+			bool is_last_char = i + 1 == text.size();
+			bool is_last_string = string_index + 1 == string_count;
+			bool is_at_end = is_last_char && is_last_string;
+
+			if (!is_at_end) {
+				char next_char = 0;
+				if (is_last_char) {
+					// It is possible that the next string is empty, so look for the next non-empty
+					for (size_t next_string_index = string_index + 1; next_string_index < string_count; next_string_index++) {
+						if (strings[next_string_index].length() == 0) {
+							continue;
+						}
+
+						next_char = strings[next_string_index][0];
+					}
+				} else {
+					next_char = text[i + 1];
+				}
+
+				if (next_char) {
+					kerning_advance = stbtt_GetCodepointKernAdvance(&font.info, text[i], next_char);
+					char_position.x += (float)(kerning_advance) * scale;
+				} else {
+					// All the subsequent string parts are empty
+				}
+			}
+
+			text_width = char_position.x;
 		}
 
-		float previous_char_x = char_position.x;
-
-		stbtt_aligned_quad quad{};
-		stbtt_GetBakedQuad(font.glyphs,
-				font.atlas.width,
-				font.atlas.height,
-				glyph_index,
-				&char_position.x,
-				&char_position.y,
-				&quad,
-				1);
-
-		if (char_position.x > max_width) {
-			// Revert the last char changes
-			char_position.x = previous_char_x;
-			break;
-		}
-
-		int32_t kerning_advance = 0;
-		if (i + 1 < text.size()) {
-			kerning_advance = stbtt_GetCodepointKernAdvance(&font.info, text[i], text[i + 1]);
-			char_position.x += (float)(kerning_advance) * scale;
-		}
-
-		text_width = char_position.x;
+		sizes[string_index] = Vec2 { text_width, font_height };
+		total_text_width += text_width;
 	}
 
-	return Vec2 { text_width, font_get_height(font) };
+	return Vec2 { total_text_width, font_height };
 }
 
 float get_default_widget_height() {
@@ -879,14 +916,23 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 		text_after_selection = text.substr(text_selection_end);
 	}
 
-	Vec2 text_before_selection_size = compute_text_size(*s_ui_state.theme.default_font, text_before_selection);
-	Vec2 text_inside_selection_size = compute_text_size(*s_ui_state.theme.default_font, text_inside_selection);
-	Vec2 text_after_selection_size = compute_text_size(*s_ui_state.theme.default_font, text_after_selection);
+	Vec2 text_before_selection_size;
+	Vec2 text_inside_selection_size;
+	Vec2 text_after_selection_size;
 
-	Vec2 text_size = Vec2 {
-		text_before_selection_size.x + text_inside_selection_size.x + text_after_selection_size.x,
-		s_ui_state.theme.default_font->size
-	};
+	Vec2 text_size;
+
+	// compute sizes of all text parts
+	{
+		std::wstring_view parts[3] = { text_before_selection, text_inside_selection, text_after_selection };
+		Vec2 part_sizes[3];
+
+		text_size = compute_text_size(*s_ui_state.theme.default_font, parts, part_sizes, 3, FLT_MAX);
+
+		text_before_selection_size = part_sizes[0];
+		text_inside_selection_size = part_sizes[1];
+		text_after_selection_size = part_sizes[2];
+	}
 
 	Vec2 text_field_size{};
 

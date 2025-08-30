@@ -125,6 +125,11 @@ float get_default_font_height();
 
 Vec2 compute_text_size(const Font& font, std::wstring_view text, float max_width = FLT_MAX);
 
+// Returns the total size of the line which consists of multiple strings.
+//
+// `sizes` recieves the size of each string passed in the `strings` array
+Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2* sizes, size_t string_count, float max_width);
+
 //
 // UI Item
 //

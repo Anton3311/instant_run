@@ -105,6 +105,10 @@ struct Arena {
 void query_system_memory_spec();
 void* arena_alloc_aligned(Arena& arena, size_t size, size_t alignment);
 
+inline void arena_align_to_cache_line(Arena& arena) {
+	arena.allocated = align(arena.allocated, 64);
+}
+
 inline void arena_reset(Arena& arena) {
 	arena.allocated = 0;
 }

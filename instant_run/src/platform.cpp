@@ -1105,8 +1105,14 @@ static void task_process_package_batch(const JobContext& job_context, void* user
 	}
 }
 
+struct InstalledAppsQueryState {
+	uint32_t worker_count;
+	IAppxFactory** factories_per_worker;
+	std::vector<PackageProcessingTaskContext> batches;
+};
+
 // Thanks to https://github.com/christophpurrer/cppwinrt-clang/blob/master/build.bat
-std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator) {
+InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) {
 	PROFILE_FUNCTION();
 
 	using namespace winrt;
@@ -1117,45 +1123,56 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 	using namespace Windows::Foundation;
 
 	winrt::hstring sid_hstring;
-	if (!query_user_sid_string(allocator, &sid_hstring)) {
+	if (!query_user_sid_string(temp_arena, &sid_hstring)) {
 		log_error("failed to get SID of the current user");
-		return {};
+		return nullptr;
 	}
 
-	HRESULT result{};
-	std::vector<InstalledAppDesc> app_ids;
+	InstalledAppsQueryState* query_state = arena_alloc<InstalledAppsQueryState>(temp_arena);
+
+	// HACK: Allocated in the arena, thus need to manually default construct
+	new (query_state) InstalledAppsQueryState();
+
+	// TODO: Move this to the `platform_initialize`
+	{
+		PROFILE_SCOPE("init_winrt");
+		winrt::init_apartment();
+	}
+
+	// All of these are temp allocations, however it is the users resposibility to clear temp arena.
+	query_state->worker_count = job_system_get_worker_count() + 1; // +1 for the main thread
+	query_state->factories_per_worker = arena_alloc_array<IAppxFactory*>(temp_arena, query_state->worker_count);
+
+	{
+		PROFILE_SCOPE("create factories");
+		for (uint32_t i = 0; i < query_state->worker_count; i++) {
+			query_state->factories_per_worker[i] = create_appx_factory();
+		}
+	}
 
 	try {
 		PROFILE_SCOPE("query_packages");
-		{
-			PROFILE_SCOPE("init_winrt");
-			winrt::init_apartment();
-		}
-
-		uint32_t worker_count = job_system_get_worker_count() + 1; // +1 for the main thread
-		IAppxFactory** factories_per_worker = arena_alloc_array<IAppxFactory*>(allocator, worker_count);
-
-		for (uint32_t i = 0; i < worker_count; i++) {
-			factories_per_worker[i] = create_appx_factory();
-		}
 
 		size_t batch_size = 2;
 		size_t max_app_descs_per_batch = 8;
-		std::vector<PackageProcessingTaskContext> batches;
 
 		{
 			PROFILE_SCOPE("generate_batches");
 			PackageManager package_manager;
 			auto packages_iterator = package_manager.FindPackagesForUser(sid_hstring);
 
+			Span<IAppxFactory*> factories_per_worker = Span<IAppxFactory*>(
+					query_state->factories_per_worker,
+					query_state->worker_count);
+
 			PackageProcessingTaskContext* current_batch = nullptr;
 			for (auto package : packages_iterator) {
 				if (current_batch == nullptr || current_batch->packages.count == batch_size) {
-					Package* package_buffer = arena_alloc_array<Package>(allocator, batch_size);
-					InstalledAppDesc* descs = arena_alloc_array<InstalledAppDesc>(allocator, max_app_descs_per_batch);
+					Package* package_buffer = arena_alloc_array<Package>(temp_arena, batch_size);
+					InstalledAppDesc* descs = arena_alloc_array<InstalledAppDesc>(temp_arena, max_app_descs_per_batch);
 
-					current_batch = &batches.emplace_back();
-					current_batch->factories = Span<IAppxFactory*>(factories_per_worker, worker_count);
+					current_batch = &query_state->batches.emplace_back();
+					current_batch->factories = factories_per_worker;
 					current_batch->packages = Span<Package>(package_buffer, 0);
 					current_batch->app_descs = Span<InstalledAppDesc>(descs, 0);
 					current_batch->max_app_descs = max_app_descs_per_batch;
@@ -1169,43 +1186,53 @@ std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator
 				//       so if we set the whole object to zero, the pointer will be null,
 				//       and won't pass the validity check during it's release
 				//
-				//       Placement new isn't an option here, becase the `Package` class isn't default constractible.
+				// NOTE: Placement new isn't an option here, becase the `Package` class isn't default constractible.
 				memset(package_target_location, 0, sizeof(*package_target_location));
 				*package_target_location = package;
 			}
 		}
 
 		// submit jobs
-
-		for (auto& batch : batches) {
+		for (auto& batch : query_state->batches) {
 			job_system_submit(task_process_package_batch, &batch);
 		}
-
-		// wait for all the jobs to complete
-		job_system_wait_for_all(allocator);
-
-		for (const auto& batch : batches) {
-			for (const auto& installed_app : batch.app_descs) {
-				app_ids.push_back(installed_app);
-			}
-		} 
-
-		// Delete factories
-		{
-			PROFILE_SCOPE("delete_factories");
-			for (uint32_t i = 0; i < worker_count; i++) {
-				factories_per_worker[i]->Release();
-			}
-
-			factories_per_worker = nullptr;
-		}
 	} catch (const winrt::hresult_error& e) {
+		// TODO: make this flow through the logger
 		winrt::hstring message = e.message();
 		const wchar_t* message_string = message.c_str();
 		std::wcout << message_string << '\n';
 	}
 
-	return app_ids;
+	return query_state;
+}
+
+std::vector<InstalledAppDesc> platform_finish_installed_apps_query(InstalledAppsQueryState* query_state,
+		Arena& job_execution_arena) {
+	PROFILE_FUNCTION();
+
+	std::vector<InstalledAppDesc> apps;
+
+	// wait for all the jobs to complete
+	job_system_wait_for_all(job_execution_arena);
+
+	for (const auto& batch : query_state->batches) {
+		for (const auto& installed_app : batch.app_descs) {
+			apps.push_back(installed_app);
+		}
+	} 
+
+	// delete factories
+	{
+		PROFILE_SCOPE("delete_factories");
+		for (uint32_t i = 0; i < query_state->worker_count; i++) {
+			query_state->factories_per_worker[i]->Release();
+		}
+	}
+
+	// HACK: manually call the desctructor, because the `query_state` was allocated in the arena
+	query_state->~InstalledAppsQueryState();
+
+	return apps;
 }
 
 bool platform_launch_installed_app(const wchar_t* app_id) {

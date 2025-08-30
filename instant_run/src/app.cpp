@@ -560,18 +560,19 @@ void initialize_search_entries(Arena& arena) {
 		}
 	}
 
-	{
-		PROFILE_SCOPE("resolve shortcuts");
-		job_system_submit_batches(resolve_shortcuts_task, Span(s_app.entries.data(), s_app.entries.size()), 8);
+	job_system_submit(resolve_shortcuts_task, s_app.entries.data(), s_app.entries.size());
 
-		ArenaSavePoint temp = arena_begin_temp(arena);
-		job_system_wait_for_all(arena);
-		arena_end_temp(temp);
-	}
+	InstalledAppsQueryState* installed_apps_query = platform_begin_installed_apps_query(arena);
+
+	job_system_wait_for_all(arena);
 	
 	{
 		PROFILE_SCOPE("query_installed_apps");
-		std::vector<InstalledAppDesc> installed_apps = platform_query_installed_apps_ids(s_app.arena);
+		std::vector<InstalledAppDesc> installed_apps = platform_finish_installed_apps_query(
+				installed_apps_query,
+				arena);
+
+		// TODO: reserve entries
 		for (const auto& app_desc : installed_apps) {
 			Entry& entry = s_app.entries.emplace_back();
 			entry.name = app_desc.display_name;
@@ -581,7 +582,7 @@ void initialize_search_entries(Arena& arena) {
 
 			TexturePixelData data = texture_load_pixel_data(app_desc.logo_uri);
 			if (data.pixels) {
-				ArenaSavePoint temp = arena_begin_temp(s_app.arena);
+				ArenaSavePoint temp = arena_begin_temp(arena);
 				TexturePixelData downsampled = texture_downscale(data, 32, s_app.arena);
 
 				entry.icon = store_app_icon(s_app.app_icon_storage, downsampled.pixels);
@@ -591,6 +592,8 @@ void initialize_search_entries(Arena& arena) {
 			}
 		}
 	}
+
+	job_system_wait_for_all(arena);
 
 	{
 		ArenaSavePoint temp = arena_begin_temp(arena);

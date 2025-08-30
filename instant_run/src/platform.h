@@ -169,8 +169,20 @@ struct InstalledAppDesc {
 	std::wstring_view display_name;
 };
 
-// ids are reperesented as strings, which are allocated in the arena
-std::vector<InstalledAppDesc> platform_query_installed_apps_ids(Arena& allocator);
+struct InstalledAppsQueryState;
+
+// Schedules the jobs that query the installed applications
+//
+// Uses the `temp_arena` for allocated the query state.
+// Returns `nullptr` in case of failure.
+//
+// Not safe to clear the `temp_arena` until the `platform_finish_installed_apps_query` has completed.
+InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena);
+
+// Waits until all the jobs scheduled by `platform_begin_installed_apps_query` and then collects the result.
+std::vector<InstalledAppDesc> platform_finish_installed_apps_query(InstalledAppsQueryState* query_state,
+		Arena& job_execution_arena);
+
 bool platform_launch_installed_app(const wchar_t* app_id);
 
 struct Bitmap {

@@ -47,6 +47,8 @@ struct Entry {
 
 	const wchar_t* id;
 	bool is_microsoft_store_app;
+
+	uint16_t frequency_score;
 };
 
 struct ResultEntry {
@@ -224,6 +226,11 @@ void update_search_result(std::wstring_view search_pattern,
 
 		RangeU32 highlight_range{};
 		uint32_t score = compute_search_score(entry.name, search_pattern, sequence_ranges, highlight_range);
+
+		// The frequency_score is store in lower half of the int,
+		// so that when the string matching scores of both entries are equal
+		// the `frequency_score` is used to prioritize the most used entry
+		score = ((score & 0xff) << 16) | ((uint32_t)(entry.frequency_score));
 
 		result.push_back({ (uint32_t)i, score, highlight_range });
 	}
@@ -866,6 +873,11 @@ void run_app_frame() {
 			EntryLaunchParams* params = new EntryLaunchParams();
 			params->as_admin = action == EntryAction::LaunchAsAdmin;
 			params->entry = entry;
+
+			if (entry.frequency_score != UINT16_MAX) {
+				entry.frequency_score += 1;
+			}
+
 			job_system_submit(launch_app_task, params);
 
 			s_app.state = AppState::Sleeping;

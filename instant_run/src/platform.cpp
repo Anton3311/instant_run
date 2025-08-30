@@ -31,19 +31,23 @@
 
 #define NOMINMAX
 
-struct ShortcutResolverState {
-	IPersistFile* persistent_file_interface; 
-	IShellLink* shell_link_interface;
-	bool is_valid;
+enum class ShortcutResolverState {
+	NotCreated,
+	Created,
+	Invalid,
 };
 
-static ShortcutResolverState s_shortcut_resolver;
+struct ShortcutResolver {
+	IPersistFile* persistent_file_interface; 
+	IShellLink* shell_link_interface;
+	ShortcutResolverState state = ShortcutResolverState::NotCreated;
+};
 
-void initialize_platform() {
+thread_local ShortcutResolver t_shortcut_resolver;
+
+static void shortcut_resolver_create_for_thread() {
 	PROFILE_FUNCTION();
-	CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-
-	s_shortcut_resolver = {};
+	t_shortcut_resolver = {};
 
     // Get a pointer to the IShellLink interface. It is assumed that CoInitialize
     // has already been called. 
@@ -51,33 +55,59 @@ void initialize_platform() {
 			nullptr,
 			CLSCTX_INPROC_SERVER,
 			IID_IShellLink,
-			(LPVOID*)&s_shortcut_resolver.shell_link_interface); 
+			(LPVOID*)&t_shortcut_resolver.shell_link_interface); 
 
-    if (SUCCEEDED(hres)) 
-    { 
+    if (SUCCEEDED(hres)) { 
         // Get a pointer to the IPersistFile interface. 
-        hres = s_shortcut_resolver.shell_link_interface->QueryInterface(IID_IPersistFile,
-				(void**)&s_shortcut_resolver.persistent_file_interface); 
+        hres = t_shortcut_resolver.shell_link_interface->QueryInterface(IID_IPersistFile,
+				(void**)&t_shortcut_resolver.persistent_file_interface); 
         
-        if (SUCCEEDED(hres)) 
-		{
-			s_shortcut_resolver.is_valid = true;
+        if (SUCCEEDED(hres)) {
+			t_shortcut_resolver.state = ShortcutResolverState::Created;
+		} else {
+			t_shortcut_resolver.state = ShortcutResolverState::Invalid;
 		}
+	} else {
+		t_shortcut_resolver.state = ShortcutResolverState::Invalid;
 	}
 }
 
-void shutdown_platform() {
+static void shortcut_resolver_release() {
+	if (t_shortcut_resolver.persistent_file_interface) {
+		t_shortcut_resolver.persistent_file_interface->Release();
+	}
+
+	if (t_shortcut_resolver.shell_link_interface) {
+		t_shortcut_resolver.shell_link_interface->Release();
+	}
+
+	t_shortcut_resolver = {};
+}
+
+void platform_initialize() {
 	PROFILE_FUNCTION();
+
+	platform_initialize_thread();
+}
+
+void platform_shutdown() {
+	PROFILE_FUNCTION();
+
+	platform_shutdown_thread();
+}
+
+void platform_initialize_thread() {
+	PROFILE_FUNCTION();
+
+	CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 	
-	if (s_shortcut_resolver.persistent_file_interface) {
-		s_shortcut_resolver.persistent_file_interface->Release();
-	}
+	shortcut_resolver_create_for_thread();
+}
 
-	if (s_shortcut_resolver.shell_link_interface) {
-		s_shortcut_resolver.shell_link_interface->Release();
-	}
+void platform_shutdown_thread() {
+	PROFILE_FUNCTION();
 
-	s_shortcut_resolver = {};
+	shortcut_resolver_release();
 
 	CoUninitialize();
 }
@@ -1333,49 +1363,14 @@ Bitmap get_file_icon(const std::filesystem::path& path, Arena& arena) {
 	return extract_file_icon(path.c_str(), arena);
 }
 
-std::filesystem::path read_symlink_path(const std::filesystem::path& path) {
-	PROFILE_FUNCTION();
-	if (!std::filesystem::exists(path)) {
-		return {};
-	}
-
-	HANDLE file_handle = CreateFileW(path.wstring().c_str(),
-			0,
-			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-			nullptr,
-			OPEN_EXISTING,
-			FILE_ATTRIBUTE_NORMAL,
-			nullptr);
-
-	if (file_handle == INVALID_HANDLE_VALUE) {
-		CloseHandle(file_handle);
-		return {};
-	}
-
-	wchar_t buffer[MAX_PATH];
-
-	// NOTE: Can return the required buffer size, if a null buffer is passed
-	size_t path_length = GetFinalPathNameByHandleW(file_handle, buffer, sizeof(buffer) / sizeof(TCHAR), FILE_NAME_NORMALIZED);
-
-	if (path_length) {
-		auto result = std::filesystem::path(std::wstring(buffer, path_length));
-
-		CloseHandle(file_handle);
-
-		return result;
-	}
-
-	CloseHandle(file_handle);
-
-	return {};
-}
-
-// Господи помилуй
-std::filesystem::path read_shortcut_path(const std::filesystem::path& path) {
+std::filesystem::path fs_resolve_shortcut(const std::filesystem::path& path) {
 	PROFILE_FUNCTION();
 	
-	if (!s_shortcut_resolver.is_valid) {
+	if (t_shortcut_resolver.state == ShortcutResolverState::Invalid) {
+		log_error("shortcut resolver is invalid");
 		return {};
+	} else if (t_shortcut_resolver.state == ShortcutResolverState::NotCreated) {
+		shortcut_resolver_create_for_thread();
 	}
 
 	// From: https://learn.microsoft.com/en-us/windows/win32/shell/links?redirectedfrom=MSDN
@@ -1387,18 +1382,18 @@ std::filesystem::path read_shortcut_path(const std::filesystem::path& path) {
 	WCHAR wsz[MAX_PATH]; 
 
 	// Load the shortcut. 
-	HRESULT hres = s_shortcut_resolver.persistent_file_interface->Load(path.wstring().c_str(), STGM_READ); 
+	HRESULT hres = t_shortcut_resolver.persistent_file_interface->Load(path.wstring().c_str(), STGM_READ); 
 	
 	if (SUCCEEDED(hres)) 
 	{ 
 		// Resolve the link. 
 		// NOTE: Not sure whether it is ok to pass a nullptr as hwnd
-		hres = s_shortcut_resolver.shell_link_interface->Resolve(nullptr, SLR_NO_UI); 
+		hres = t_shortcut_resolver.shell_link_interface->Resolve(nullptr, SLR_NO_UI); 
 
 		if (SUCCEEDED(hres)) 
 		{ 
 			// Get the path to the link target. 
-			hres = s_shortcut_resolver.shell_link_interface->GetPath(szGotPath,
+			hres = t_shortcut_resolver.shell_link_interface->GetPath(szGotPath,
 					MAX_PATH,
 					(WIN32_FIND_DATA*)&wfd,
 					SLGP_SHORTPATH); 

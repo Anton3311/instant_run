@@ -97,8 +97,11 @@ struct WindowEvent {
 
 struct Window;
 
-void initialize_platform();
-void shutdown_platform();
+void platform_initialize();
+void platform_shutdown();
+
+void platform_initialize_thread();
+void platform_shutdown_thread();
 
 void platform_log_error_message();
 
@@ -186,8 +189,7 @@ void fs_release_file_icon(SystemIconHandle icon);
 Bitmap fs_extract_icon_bitmap(SystemIconHandle icon, Arena& bitmap_allocator);
 
 Bitmap get_file_icon(const std::filesystem::path& path, Arena& arena);
-std::filesystem::path read_symlink_path(const std::filesystem::path& path);
-std::filesystem::path read_shortcut_path(const std::filesystem::path& path);
+std::filesystem::path fs_resolve_shortcut(const std::filesystem::path& path);
 
 enum class RunFileResult {
 	Ok,

@@ -622,14 +622,7 @@ void append_entry(std::vector<Entry>& entries, const std::filesystem::path& path
 	
 	Entry& entry = entries.emplace_back();
 	entry.name = path.filename().replace_extension("").wstring();
-
-	if (path.extension() == ".lnk") {
-		std::filesystem::path resolved_path = read_shortcut_path(path);
-
-		entry.path = resolved_path;
-	} else {
-		entry.path = path;
-	}
+	entry.path = path;
 }
 
 void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entries) {
@@ -843,6 +836,17 @@ void initialize_app() {
 	s_app.wait_for_window_events = false;
 }
 
+void resolve_shortcuts_task(const JobContext& context, void* data) {
+	PROFILE_FUNCTION();
+
+	Span<Entry> entries = Span(reinterpret_cast<Entry*>(data), context.batch_size);
+	for (Entry& entry : entries) {
+		if (entry.path.extension() == ".lnk") {
+			entry.path = fs_resolve_shortcut(entry.path);
+		}
+	}
+}
+
 void initialize_search_entries(Arena& arena) {
 	PROFILE_FUNCTION();
 
@@ -857,6 +861,15 @@ void initialize_search_entries(Arena& arena) {
 				log_error(e.what());
 			}
 		}
+	}
+
+	{
+		PROFILE_SCOPE("resolve shortcuts");
+		job_system_submit_batches(resolve_shortcuts_task, Span(s_app.entries.data(), s_app.entries.size()), 8);
+
+		ArenaSavePoint temp = arena_begin_temp(arena);
+		job_system_wait_for_all(arena);
+		arena_end_temp(temp);
 	}
 	
 	{
@@ -1127,7 +1140,7 @@ int run_app(CommandLineArgs cmd_args) {
 
 	job_system_init(4);
 
-	initialize_platform();
+	platform_initialize();
 
 	if (s_app.use_keyboard_hook) {
 		init_keyboard_hook(s_app.arena);
@@ -1188,9 +1201,9 @@ int run_app(CommandLineArgs cmd_args) {
 
 	shutdown_renderer();
 	window_destroy(s_app.window);
-	shutdown_platform();
 
 	job_system_shutdown();
+	platform_shutdown();
 
 	log_shutdown_thread();
 	log_shutdown();

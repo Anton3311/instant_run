@@ -2,6 +2,7 @@
 
 #include "core.h"
 #include "log.h"
+#include "platform.h"
 
 #include <thread>
 #include <mutex>
@@ -13,6 +14,7 @@
 struct Task {
 	JobSystemTask task_func;
 	void* user_data;
+	size_t batch_size;
 };
 
 struct JobSystemState {
@@ -45,7 +47,7 @@ static bool try_pop_task(Task* out_task) {
 	return true;
 }
 
-static bool try_execute_single_task(const JobContext& context) {
+static bool try_execute_single_task(JobContext& context) {
 	PROFILE_FUNCTION();
 
 	Task task{};
@@ -61,6 +63,7 @@ static bool try_execute_single_task(const JobContext& context) {
 
 	{
 		PROFILE_SCOPE("execute_task");
+		context.batch_size = task.batch_size;
 		task.task_func(context, task.user_data);
 	}
 
@@ -87,6 +90,8 @@ static void thread_worker(uint32_t index) {
 
 	log_info("worker started");
 
+	platform_initialize_thread();
+
 	while (true) {
 		bool is_running = s_job_sys_state.is_running.load(std::memory_order::relaxed);
 
@@ -106,6 +111,8 @@ static void thread_worker(uint32_t index) {
 	}
 	
 	log_info("worker stopped");
+
+	platform_shutdown_thread();
 
 	log_shutdown_thread();
 
@@ -128,13 +135,13 @@ uint32_t job_system_get_worker_count() {
 	return (uint32_t)s_job_sys_state.worker_threads.size();
 }
 
-void job_system_submit(JobSystemTask task, void* user_data) {
+void job_system_submit(JobSystemTask task, void* user_data, size_t batch_size) {
 	PROFILE_FUNCTION();
 
 	{
 		PROFILE_SCOPE("append_task");
 		std::unique_lock lock(s_job_sys_state.queue_mutex);
-		s_job_sys_state.task_queue.push(Task { .task_func = task, .user_data = user_data });
+		s_job_sys_state.task_queue.push(Task { .task_func = task, .user_data = user_data, .batch_size = batch_size });
 	}
 
 	s_job_sys_state.wake_var.notify_one();

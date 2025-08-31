@@ -774,6 +774,37 @@ inline static void text_input_move_cursor(TextInputState& input_state,
 	}
 }
 
+inline static bool text_input_input_char(TextInputState& input_state, wchar_t input_char) {
+	if (input_state.text_length == input_state.buffer.count) {
+		return false;
+	}
+
+	// TODO: Allow any char
+	uint32_t glyph_index = font_get_glyph_index(*s_ui_state.theme.default_font, input_char);
+	if (glyph_index == UINT32_MAX) {
+		return false;
+	}
+
+	// First get rid of the selected text
+	if (input_state.selection_start != input_state.selection_end) {
+		text_input_delete_range(input_state, text_input_state_get_selection_range(input_state));
+	}
+
+	// Then input the codepoint
+	size_t cursor_position = input_state.selection_end;
+	size_t after_cursor_text_length = input_state.text_length - cursor_position;
+	for (int64_t i = input_state.text_length; i > cursor_position; i--) {
+		input_state.buffer.values[i] = input_state.buffer.values[i - 1];
+	}
+
+	input_state.buffer.values[cursor_position] = input_char;
+	input_state.text_length += 1;
+	input_state.selection_end += 1;
+	input_state.selection_start = input_state.selection_end;
+
+	return true;
+}
+
 static bool text_input_behaviour(TextInputState& input_state) {
 	PROFILE_FUNCTION();
 
@@ -863,27 +894,7 @@ static bool text_input_behaviour(TextInputState& input_state) {
 		}
 		case WindowEventKind::CharTyped: {
 			auto& char_event = events[i].data.char_typed;
-			
-			if (input_state.text_length < input_state.buffer.count) {
-				// HACK: Allow any char
-
-				uint32_t glyph_index = font_get_glyph_index(*s_ui_state.theme.default_font, char_event.c);
-				if (glyph_index != UINT32_MAX && input_state.selection_start == input_state.selection_end) {
-					size_t cursor_position = input_state.selection_end;
-					size_t after_cursor_text_length = input_state.text_length - cursor_position;
-					for (int64_t i = input_state.text_length; i > cursor_position; i--) {
-						input_state.buffer.values[i] = input_state.buffer.values[i - 1];
-					}
-
-					input_state.buffer.values[cursor_position] = char_event.c;
-					input_state.text_length += 1;
-					input_state.selection_end += 1;
-					input_state.selection_start = input_state.selection_end;
-
-					changed = true;
-				}
-			}
-
+			changed |= text_input_input_char(input_state, char_event.c);
 			break;
 		}
 		default:

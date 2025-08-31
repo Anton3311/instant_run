@@ -165,7 +165,7 @@ void icon(const Texture& texture, Rect uv_rect);
 void image(const Texture& texture, Vec2 size, Rect uv_rect, Color tint = WHITE);
 bool text_input(TextInputState& input_state, std::wstring_view prompt = {}); 
 
-void colored_text(std::wstring_view text, Color color);
+void colored_text(const std::wstring_view* text_parts, const Color* colors, size_t text_part_count);
 void text(std::wstring_view text);
 
 void separator();

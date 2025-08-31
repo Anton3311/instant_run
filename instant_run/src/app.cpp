@@ -261,38 +261,57 @@ void draw_result_entry_text(const Entry& entry,
 		const ResultViewState& state,
 		Color highlight_color,
 		float available_width) {
+	PROFILE_FUNCTION();
+
+	const ui::Theme& theme = ui::get_theme();
+	const Color default_text_color = theme.text_color;
 
 	ui::LayoutConfig layout_config{};
 	ui::begin_fixed_horizontal_layout(Vec2 { available_width, ui::get_default_font_height() }, &layout_config);
+
+	ArenaSavePoint temp = arena_begin_temp(s_app.arena);
+
+	// Assume the worst case when the there are non-highlighted text in between highlighted ranges
+	// + two non-highlighted ranges at the start and at the end.
+	uint32_t max_text_part_count = match.highlights.count * 2 + 1;
+
+	std::wstring_view* text_parts = arena_alloc_array<std::wstring_view>(s_app.arena, max_text_part_count);
+	Color* part_colors = arena_alloc_array<Color>(s_app.arena, max_text_part_count);
+
+	uint32_t part_count = 0;
 
 	uint32_t cursor = 0;
 	for (uint32_t i = match.highlights.start; i < match.highlights.start + match.highlights.count; i++) {
 		RangeU32 highlight_range = state.highlights[i];
 
 		if (cursor != highlight_range.start) {
-			std::wstring_view t = std::wstring_view(entry.name)
+			text_parts[part_count] = std::wstring_view(entry.name)
 				.substr(cursor, highlight_range.start - cursor);
 
-			ui::text(t);
-
-			float text_width = ui::get_item_bounds().width();
-			available_width -= text_width;
+			part_colors[part_count] = default_text_color;
+			part_count += 1;
 		}
 
-		std::wstring_view highlighted_text = std::wstring_view(entry.name)
+
+		text_parts[part_count] = std::wstring_view(entry.name)
 			.substr(highlight_range.start, highlight_range.count);
 
-		ui::colored_text(highlighted_text, highlight_color);
+		part_colors[part_count] = highlight_color;
+		part_count += 1;
 
 		cursor = highlight_range.start + highlight_range.count;
 	}
 
 	if (cursor < entry.name.length()) {
-		std::wstring_view t = std::wstring_view(entry.name)
-			.substr(cursor);
-
-		ui::text(t);
+		text_parts[part_count] = std::wstring_view(entry.name).substr(cursor);
+		part_colors[part_count] = default_text_color;
+		part_count += 1;
 	}
+
+	// finally renderer the text parts
+	ui::colored_text(text_parts, part_colors, part_count);
+
+	arena_end_temp(temp);
 
 	ui::end_horizontal_layout();
 }
@@ -750,7 +769,9 @@ void run_app_frame() {
 	for (size_t i = 0; i < events.count; i++) {
 		switch (events[i].kind) {
 		case WindowEventKind::FocusLost:
-			s_app.state = AppState::Sleeping;
+			if (s_app.use_keyboard_hook) {
+				s_app.state = AppState::Sleeping;
+			}
 			break;
 		case WindowEventKind::Key: {
 			auto& key_event = events[i].data.key;

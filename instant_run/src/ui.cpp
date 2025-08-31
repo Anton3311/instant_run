@@ -313,11 +313,12 @@ Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2*
 	const float font_height = font_get_height(font);
 
 	float total_text_width = 0.0f;
+	Vec2 char_position = {};
 
 	for (size_t string_index = 0; string_index < string_count; string_index++) {
 		std::wstring_view text = strings[string_index];
 
-		Vec2 char_position = {};
+		Vec2 string_start_position = char_position;
 		float text_width = 0.0f;
 
 		for (size_t i = 0; i < text.size(); i++) {
@@ -342,6 +343,11 @@ Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2*
 			if (char_position.x > max_width) {
 				// Revert the last char changes
 				char_position.x = previous_char_x;
+
+				for (size_t j = string_index + 1; j < string_count; j++) {
+					sizes[j] = Vec2 { 0.0f, font_height };
+				}
+
 				break;
 			}
 
@@ -360,6 +366,7 @@ Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2*
 						}
 
 						next_char = strings[next_string_index][0];
+						break;
 					}
 				} else {
 					next_char = text[i + 1];
@@ -373,7 +380,7 @@ Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2*
 				}
 			}
 
-			text_width = char_position.x;
+			text_width = char_position.x - string_start_position.x;
 		}
 
 		sizes[string_index] = Vec2 { text_width, font_height };
@@ -1001,20 +1008,49 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 	return changed;
 }
 
-void colored_text(std::wstring_view text, Color color) {
+void colored_text(const std::wstring_view* text_parts, const Color* colors, size_t text_part_count) {
 	PROFILE_FUNCTION();
 
+	if (text_part_count == 0) {
+		return;
+	}
+
+	ArenaSavePoint temp = arena_begin_temp(*s_ui_state.arena);
+	Vec2* part_sizes = arena_alloc_array<Vec2>(*s_ui_state.arena, text_part_count);
+
 	float available_space = get_available_layout_space();
-	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font, text, available_space);
+	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font,
+			text_parts,
+			part_sizes,
+			text_part_count,
+			available_space);
 
 	add_item(text_size);
 	Vec2 text_position = s_ui_state.last_item.bounds.min;
+	Vec2 text_part_position = text_position;
 
-	draw_text(text, text_position, *s_ui_state.theme.default_font, color, available_space);
+	for (size_t i = 0; i < text_part_count; i++) {
+		Vec2 text_size = part_sizes[i];
+
+		// Has zero width because the text exeeded the max width (`available_space`)
+		if (text_size.x == 0.0f) {
+			break;
+		}
+
+		draw_text(text_parts[i],
+				text_part_position,
+				*s_ui_state.theme.default_font,
+				colors[i],
+				available_space - (text_part_position.x - text_position.x));
+
+		text_part_position.x += text_size.x;
+	}
+
+	arena_end_temp(temp);
 }
 
 void text(std::wstring_view text) {
-	colored_text(text, s_ui_state.theme.text_color);
+	colored_text(&text, &s_ui_state.theme.text_color, 1);
 }
 
 static constexpr float SEPARATOR_THICKNESS = 2.0f;

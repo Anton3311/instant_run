@@ -41,6 +41,7 @@ struct Icons {
 struct Entry {
 	std::wstring name;
 	std::filesystem::path path;
+	std::filesystem::path resolved_path;
 
 	bool icon_is_loaded;
 	UVec2 icon;
@@ -455,7 +456,7 @@ void try_load_app_entry_icon(ApplicationIconsStorage& app_icon_storage, Entry& e
 		return;
 	}
 
-	SystemIconHandle icon_handle = fs_query_file_icon(entry.path);
+	SystemIconHandle icon_handle = fs_query_file_icon(entry.resolved_path);
 	ApplicationIconsStorage::IconId icon_id = icon_handle;
 
 	if (!icon_handle) {
@@ -552,7 +553,9 @@ void resolve_shortcuts_task(const JobContext& context, void* data) {
 	Span<Entry> entries = Span(reinterpret_cast<Entry*>(data), context.batch_size);
 	for (Entry& entry : entries) {
 		if (entry.path.extension() == ".lnk") {
-			entry.path = fs_resolve_shortcut(entry.path);
+			entry.resolved_path = fs_resolve_shortcut(entry.path);
+		} else {
+			entry.resolved_path = entry.path;
 		}
 	}
 }

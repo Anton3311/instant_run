@@ -407,17 +407,9 @@ void window_hide(Window* window) {
 void window_focus(Window* window) {
 	EnableWindow(window->handle, true);
 
-	if (!SetActiveWindow(window->handle)) {
-		std::cout << "Failed to set active window: ";
-		platform_log_error_message();
-		std::cout << '\n';
-		return;
-	}
-
 	if (!BringWindowToTop(window->handle)) {
-		std::cout << "Failed to bring window to front: ";
+		log_error("Failed to bring window to top");
 		platform_log_error_message();
-		std::cout << '\n';
 		return;
 	}
 
@@ -595,6 +587,12 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 		return WVR_ALIGNTOP | WVR_ALIGNLEFT;
 	case WM_NCACTIVATE:
 		return TRUE;
+	case WM_SHOWWINDOW:
+		// The window is being shown
+		if (wParam) {
+			window_focus(window);
+		}
+		break;
 	case WM_GETMINMAXINFO:
 	{
 		// NOTE: This prevents the flickering window style changes when the window foucs changes

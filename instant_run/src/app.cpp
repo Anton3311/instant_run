@@ -1061,7 +1061,6 @@ int run_app(CommandLineArgs cmd_args) {
 		log_info("initial start");
 
 		window_show(s_app.window);
-		window_focus(s_app.window);
 	}
 
 	while (!window_should_close(s_app.window)) {
@@ -1085,7 +1084,6 @@ int run_app(CommandLineArgs cmd_args) {
 			enter_sleep_mode();
 
 			window_show(s_app.window);
-			window_focus(s_app.window);
 			break;
 		}
 	}

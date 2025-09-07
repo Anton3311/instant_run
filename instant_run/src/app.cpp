@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <string>
+#include <fstream>
 #include <vector>
 #include <mutex>
 #include <unordered_map>
@@ -573,6 +574,90 @@ void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entri
 	}
 }
 
+void serialize_frequency_scores(Span<const Entry> entries, const char* output_file) {
+	PROFILE_FUNCTION();
+	std::wofstream file("search_scores");
+	for (const auto& entry : entries) {
+		if (entry.frequency_score > 0) {
+			file << entry.frequency_score << " \"" << entry.name << "\"\n";
+		}
+	}
+}
+
+bool deserialize_frequency_scores(Span<Entry> entries, const char* input_file, Arena& arena) {
+	PROFILE_FUNCTION();
+
+	std::wifstream stream(input_file);
+	if (!stream.is_open()) {
+		return false;
+	}
+
+	stream.seekg(0, std::ios::end);
+	size_t size = stream.tellg();
+	stream.seekg(0, std::ios::beg);
+
+	ArenaSavePoint temp = arena_begin_temp(arena);
+	wchar_t* buffer = arena_alloc_array<wchar_t>(arena, size + 1);
+	buffer[size] = 0;
+
+	stream.read(buffer, size);
+
+	std::wstring_view file_content = std::wstring_view(buffer, size);
+	std::unordered_map<std::wstring_view, uint16_t> app_name_to_score;
+
+	size_t read_position = 0;
+	while (read_position < file_content.size()) {
+		uint16_t score_value = 0;
+		while (read_position < file_content.size()
+				&& file_content[read_position] >= L'0'
+				&& file_content[read_position] <= L'9') {
+
+			uint16_t digit = file_content[read_position] - L'0';
+			score_value *= 10;
+			score_value += digit;
+
+			read_position += 1;
+		}
+
+		// Parse the rest of the line
+		size_t after_score_position = read_position;
+		while (read_position < file_content.size() && file_content[read_position] != '\n') {
+			read_position += 1;
+		}
+
+		size_t name_start = after_score_position + 2;
+		size_t name_end = read_position - 1;
+		if (name_start >= file_content.size()
+				|| name_start >= name_end
+				|| file_content[after_score_position] != L' '
+				|| file_content[after_score_position + 1] != L'"'
+				|| file_content[read_position - 1] != L'"') {
+			read_position += 1; // skip new line char
+			continue;
+		}
+
+		std::wstring_view application_name = file_content.substr(name_start,
+				name_end - name_start);
+
+		app_name_to_score.emplace(application_name, score_value);
+
+		read_position += 1; // skip new line char
+	}
+
+	for (auto& entry : entries) {
+		auto it = app_name_to_score.find(entry.name);
+		if (it == app_name_to_score.end()) {
+			continue;
+		}
+
+		entry.frequency_score = it->second;
+	}
+
+	arena_end_temp(temp);
+
+	return true;
+}
+
 struct SearchEntriesQuery {
 	InstalledAppsQueryState* installed_apps_query;
 };
@@ -927,6 +1012,8 @@ void run_app_frame() {
 	s_app.wait_for_window_events = true;
 }
 
+static constexpr const char* SEARCH_SCORES_FILE_PATH = "search_scores";
+
 int run_app(CommandLineArgs cmd_args) {
 	s_app.use_keyboard_hook = true;
 	if (cmd_args.count == 2) {
@@ -965,6 +1052,8 @@ int run_app(CommandLineArgs cmd_args) {
 	// At this point the search entry must be made available
 	collect_search_entries_query_result(s_app.arena, search_entries_query);
 
+	deserialize_frequency_scores(Span(s_app.entries.data(), s_app.entries.size()), SEARCH_SCORES_FILE_PATH, s_app.arena);
+
 	clear_search_result();
 
 	{
@@ -1000,6 +1089,8 @@ int run_app(CommandLineArgs cmd_args) {
 			break;
 		}
 	}
+
+	serialize_frequency_scores(Span<const Entry>(s_app.entries.data(), s_app.entries.size()), SEARCH_SCORES_FILE_PATH);
 
 	log_info("terminated");
 

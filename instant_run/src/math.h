@@ -70,6 +70,10 @@ inline float min(float a, float b) {
 	return a < b ? a : b;
 }
 
+inline uint32_t min(uint32_t a, uint32_t b) {
+	return a < b ? a : b;
+}
+
 inline float max(float a, float b) {
 	return a < b ? b : a;
 }
@@ -80,6 +84,18 @@ inline Vec2 min(Vec2 a, Vec2 b) {
 
 inline Vec2 max(Vec2 a, Vec2 b) {
 	return Vec2 { max(a.x, b.x), max(a.y, b.y) };
+}
+
+inline float clamp(float value, float min, float max) {
+	if (value < min) {
+		return min;
+	}
+
+	if (value > max) {
+		return max;
+	}
+
+	return value;
 }
 
 //

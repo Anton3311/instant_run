@@ -423,6 +423,32 @@ void texture_release_pixel_data(const TexturePixelData& pixel_data) {
 	free(pixel_data.pixels);
 }
 
+struct FloatColor {
+	float r;
+	float g;
+	float b;
+	float a;
+};
+
+inline FloatColor float_color_from_bytes(const uint8_t* bytes) {
+	constexpr float SCALE_FACTOR = 1.0f / 255.0f;
+
+	uint8_t r = bytes[3];
+	uint8_t g = bytes[2];
+	uint8_t b = bytes[1];
+	uint8_t a = bytes[0];
+
+	return FloatColor { (float)r * SCALE_FACTOR, (float)g * SCALE_FACTOR, (float)b * SCALE_FACTOR, (float)a * SCALE_FACTOR };
+}
+
+inline FloatColor operator+(const FloatColor& a, const FloatColor& b) {
+	return FloatColor { a.r + b.r, a.g + b.g, a.b + b.b, a.a + b.a };
+}
+
+inline FloatColor operator*(const FloatColor& a, float scalar) {
+	return FloatColor { a.r * scalar, a.g * scalar, a.b * scalar, a.a * scalar };
+}
+
 TexturePixelData texture_downscale(const TexturePixelData& source, uint32_t target_size, Arena& allocator) {
 	PROFILE_FUNCTION();
 
@@ -441,26 +467,57 @@ TexturePixelData texture_downscale(const TexturePixelData& source, uint32_t targ
 
 		const uint8_t* source_pixels = reinterpret_cast<const uint8_t*>(source.pixels);
 
-		// WARN: full of hacks
+		float width_convertion_factor = (float)source.width / target_size;
+		float height_convertion_factor = (float)source.height / target_size;
+
 		for (uint32_t y = 0; y < target_size; y++) {
 			for (uint32_t x = 0; x < target_size; x++) {
-				uint32_t source_x = x * source.width / target_size;
-				uint32_t source_y = y * source.height / target_size;
+				float source_x = (float)x * width_convertion_factor;
+				float source_y = (float)y * height_convertion_factor;
 
-				// flip vertically
-				source_y = source.height - source_y - 1;
+				uint32_t source_x_floor = (uint32_t)std::floor(source_x);
+				uint32_t source_y_floor = (uint32_t)std::floor(source_y);
 
-				uint32_t source_offset = (source_y * source.width + source_x) * bytes_per_pixel;
+				UVec2 top_left_pos = UVec2 { source_x_floor, source_y_floor };
+				UVec2 top_right_pos = UVec2 { min(source_x_floor + 1, source.width - 1), source_y_floor };
+				UVec2 bottom_left_pos = UVec2 { source_x_floor, min(source_y_floor + 1, source.height - 1) };
+				UVec2 bottom_right_pos = UVec2 {
+					min(source_x_floor + 1, source.width - 1),
+					min(source_y_floor + 1, source.height - 1)
+				};
 
-				uint8_t source_r = source_pixels[source_offset + 3];
-				uint8_t source_g = source_pixels[source_offset + 2];
-				uint8_t source_b = source_pixels[source_offset + 1];
-				uint8_t source_a = source_pixels[source_offset + 0];
+				uint32_t top_left_pixel_offset = top_left_pos.y * source.width + top_left_pos.x;
+				uint32_t top_right_pixel_offset = top_right_pos.y * source.width + top_right_pos.x;
+				uint32_t bottom_left_pixel_offset = bottom_left_pos.y * source.width + bottom_left_pos.x;
+				uint32_t bottom_right_pixel_offset = bottom_right_pos.y * source.width + bottom_right_pos.x;
 
-				new_pixels[y * target_size + x] = ((uint32_t)source_r << 24)
-					| ((uint32_t)source_g << 16)
-					| ((uint32_t)source_b << 8)
-					| ((uint32_t)source_a);
+				FloatColor top_left = float_color_from_bytes(source_pixels + top_left_pixel_offset * bytes_per_pixel);
+				FloatColor top_right = float_color_from_bytes(source_pixels + top_right_pixel_offset * bytes_per_pixel);
+				FloatColor bottom_left = float_color_from_bytes(source_pixels + bottom_left_pixel_offset * bytes_per_pixel);
+				FloatColor bottom_right = float_color_from_bytes(source_pixels + bottom_right_pixel_offset * bytes_per_pixel);
+
+				float x_blend = source_x - std::floor(source_x);
+				float y_blend = source_y - std::floor(source_y);
+
+				float top_left_blend_factor = (1.0f - x_blend) * (1.0f - y_blend);
+				float top_right_blend_factor = x_blend * (1.0f - y_blend);
+				float bottom_left_blend_factor = (1.0f - x_blend) * y_blend;
+				float bottom_right_blend_factor = x_blend * y_blend;
+
+				FloatColor blended_color = top_left * top_left_blend_factor
+					+ top_right * top_right_blend_factor
+					+ bottom_left * bottom_left_blend_factor
+					+ bottom_right * bottom_right_blend_factor;
+
+				uint8_t blended_r = (uint8_t)(clamp(blended_color.r, 0.0f, 1.0f) * 255.0f);
+				uint8_t blended_g = (uint8_t)(clamp(blended_color.g, 0.0f, 1.0f) * 255.0f);
+				uint8_t blended_b = (uint8_t)(clamp(blended_color.b, 0.0f, 1.0f) * 255.0f);
+				uint8_t blended_a = (uint8_t)(clamp(blended_color.a, 0.0f, 1.0f) * 255.0f);
+
+				new_pixels[(target_size - 1 - y) * target_size + x] = ((uint32_t)blended_r << 24)
+					| ((uint32_t)blended_g << 16)
+					| ((uint32_t)blended_b << 8)
+					| ((uint32_t)blended_a);
 			}
 		}
 

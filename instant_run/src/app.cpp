@@ -460,6 +460,7 @@ void try_load_app_entry_icon(ApplicationIconsStorage& app_icon_storage, Entry& e
 
 	if (!icon_handle) {
 		entry.icon_is_loaded = true; // loaded but invalid
+		entry.icon = INVALID_ICON_POSITION;
 		return;
 	}
 
@@ -701,6 +702,7 @@ void collect_search_entries_query_result(Arena& arena, SearchEntriesQuery& query
 			ArenaSavePoint temp = arena_begin_temp(arena);
 			TexturePixelData downsampled = texture_downscale(data, 32, s_app.arena);
 
+			entry.icon_is_loaded = true;
 			entry.icon = store_app_icon(s_app.app_icon_storage, downsampled.pixels);
 
 			texture_release_pixel_data(data);

@@ -363,8 +363,6 @@ EntryAction draw_result_entry(const ResultEntry& match,
 
 		if (entry.icon != INVALID_ICON_POSITION) {
 			draw_rect(ui::get_item_bounds(), WHITE, app_icon_storage.texture, get_icon_rect(app_icon_storage, entry.icon));
-		} else {
-			draw_rounded_rect(ui::get_item_bounds(), WHITE, theme.frame_corner_radius);
 		}
 	}
 

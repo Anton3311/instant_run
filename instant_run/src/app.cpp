@@ -941,7 +941,7 @@ void run_app_frame() {
 	float item_spacing = theme.default_layout_config.item_spacing;
 
 	float item_count = (available_height + item_spacing) / (item_height + item_spacing);
-	s_app.result_view_state.fully_visible_item_count = (uint32_t)std::ceil(item_count);
+	s_app.result_view_state.fully_visible_item_count = (uint32_t)std::floor(item_count);
 	uint32_t partially_visible_item_count = (uint32_t)std::ceil(item_count);
 
 	update_result_view_scroll(s_app.result_view_state);

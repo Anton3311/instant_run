@@ -1,7 +1,9 @@
-set OUT_DIR=%1
+set VERSION=%1
 set PLATFORM=win
 set ARCH=x86_64
 set APP_NAME=instant_run
+
+set OUT_DIR=build\%APP_NAME%-%VERSION%-%PLATFORM%-%ARCH%
 
 if not exist %OUT_DIR% mkdir %OUT_DIR%
 

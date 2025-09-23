@@ -1033,7 +1033,19 @@ int run_app(CommandLineArgs cmd_args) {
 
 	log_info("logger started");
 
-	job_system_init(4);
+	{
+		// 1 - for the main thread, 1 - for the hook thread
+		uint32_t thread_count = std::thread::hardware_concurrency() - 2;
+		if (thread_count == 0) {
+			log_error("Cannot initialize the job system with 0 workers");
+			log_shutdown_thread();
+			log_shutdown();
+
+			return EXIT_FAILURE;
+		}
+
+		job_system_init(thread_count);
+	}
 
 	platform_initialize();
 

@@ -250,8 +250,3 @@ inline std::basic_string_view<T> str_builder_to_str(const StringBuilder<T>& buil
 	return std::basic_string_view<T>(builder.string, builder.length);
 }
 
-//
-// File IO
-//
-
-Span<uint8_t> file_read_all_bytes(const char* path, Arena& allocator);

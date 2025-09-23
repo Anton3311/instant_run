@@ -16,6 +16,17 @@ struct LoggerThreadState {
 	std::wstring_view name;
 };
 
+inline static std::wstring_view str_to_wstr(std::string_view string, Arena& arena) {
+	PROFILE_FUNCTION();
+
+	wchar_t* buffer = arena_alloc_array<wchar_t>(arena, string.length());
+	for (size_t i = 0; i < string.length(); i++) {
+		buffer[i] = string[i];
+	}
+
+	return std::wstring_view(buffer, string.length());
+}
+
 static LoggerState s_logger;
 thread_local LoggerThreadState t_logger_thread;
 
@@ -32,9 +43,9 @@ bool log_init(const char* log_file_path, bool output_to_stdout) {
 	return true;
 }
 
-bool log_init_thread(Arena& arena, std::wstring_view thread_name) {
+bool log_init_thread(Arena& arena, std::string_view thread_name) {
 	t_logger_thread.arena = &arena;
-	t_logger_thread.name = wstr_duplicate(thread_name, *t_logger_thread.arena);
+	t_logger_thread.name = str_to_wstr(thread_name, *t_logger_thread.arena);
 	return true;
 }
 
@@ -100,13 +111,9 @@ void log_message(std::string_view message, MessageType message_type) {
 	}
 
 	ArenaSavePoint temp = arena_begin_temp(*t_logger_thread.arena);
-	
-	wchar_t* buffer = arena_alloc_array<wchar_t>(*t_logger_thread.arena, message.length());
-	for (size_t i = 0; i < message.length(); i++) {
-		buffer[i] = message[i];
-	}
 
-	log_message(std::wstring_view(buffer, message.length()), message_type);
+	std::wstring_view wide_message = str_to_wstr(message, *t_logger_thread.arena);
+	log_message(wide_message, message_type);
 
 	arena_end_temp(temp);
 }

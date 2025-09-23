@@ -77,7 +77,7 @@ static void thread_worker(uint32_t index) {
 	generic_arena.capacity = mb_to_bytes(8);
 
 	{
-		std::wstring thread_name = std::wstring(L"worker") + std::to_wstring(index);
+		std::string thread_name = std::string("worker") + std::to_string(index);
 
 		log_init_thread(logger_arena, thread_name);
 		PROFILE_NAME_THREAD(thread_name.c_str());

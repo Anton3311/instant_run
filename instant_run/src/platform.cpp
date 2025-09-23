@@ -177,7 +177,7 @@ struct KeyboardHook {
 
 static const char* KEYBOARD_HOOK_FUNCTION_NAME = "keyboard_hook";
 static const char* KEYBOARD_HOOK_INIT_FUNCTION_NAME = "init_keyboard_hook";
-static const wchar_t* KEYBOARD_HOOK_WORKER_THREAD_NAME = L"low_level_keyboard_hook_thread_worker";
+static const char* KEYBOARD_HOOK_WORKER_THREAD_NAME = "low_level_keyboard_hook_thread_worker";
 
 void keyboard_hook_thread_worker(KeyboardHookHandle hook) {
 	PROFILE_NAME_THREAD(KEYBOARD_HOOK_WORKER_THREAD_NAME);

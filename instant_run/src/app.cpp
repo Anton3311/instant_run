@@ -13,7 +13,6 @@
 #include <vector>
 #include <mutex>
 #include <unordered_map>
-#include <iostream>
 
 static constexpr UVec2 INVALID_ICON_POSITION = UVec2 { UINT32_MAX, UINT32_MAX };
 
@@ -488,7 +487,7 @@ void try_load_app_entry_icon(ApplicationIconsStorage& app_icon_storage, Entry& e
 void enable_app() {
 	PROFILE_FUNCTION();
 
-	log_info("recieved activation notification from the keyboard hook");
+	log_info(L"recieved activation notification from the keyboard hook");
 
 	s_app.enable_var.notify_all();
 	s_app.is_active.store(true, std::memory_order::acquire);
@@ -504,9 +503,9 @@ void wait_for_activation() {
 	// Can happen that the hook notifies before this function is called
 	bool is_already_active = s_app.is_active.load(std::memory_order::relaxed);
 	if (is_already_active) {
-		log_info("already activated");
+		log_info(L"already activated");
 	} else {
-		log_info("waiting for activation");
+		log_info(L"waiting for activation");
 		std::unique_lock lock(s_app.enable_mutex);
 		s_app.enable_var.wait(lock);
 	}
@@ -521,7 +520,7 @@ void enter_sleep_mode() {
 		return;
 	}
 
-	log_info("entering sleep mode");
+	log_info(L"entering sleep mode");
 	s_app.is_active.store(false, std::memory_order::acquire);
 	wait_for_activation();
 }
@@ -712,12 +711,12 @@ void collect_search_entries_query_result(Arena& arena, SearchEntriesQuery& query
 
 	{
 		ArenaSavePoint temp = arena_begin_temp(arena);
-		StringBuilder builder = { &arena };
-		str_builder_append(builder, "loaded ");
-		str_builder_append(builder, std::to_string(s_app.entries.size()));
-		str_builder_append(builder, " entries");
+		StringBuilder<wchar_t> builder = { &arena };
+		str_builder_append<wchar_t>(builder, L"loaded ");
+		str_builder_append<wchar_t>(builder, std::to_wstring(s_app.entries.size()));
+		str_builder_append<wchar_t>(builder, L" entries");
 
-		log_info(std::string_view(builder.string, builder.length));
+		log_info(str_builder_to_str(builder));
 		arena_end_temp(temp);
 	}
 
@@ -1029,15 +1028,15 @@ int run_app(CommandLineArgs cmd_args) {
 	s_app.arena.capacity = mb_to_bytes(8);
 
 	log_init("log.txt", true);
-	log_init_thread(s_app.arena, "main");
+	log_init_thread(s_app.arena, L"main");
 
-	log_info("logger started");
+	log_info(L"logger started");
 
 	{
 		// 1 - for the main thread, 1 - for the hook thread
 		uint32_t thread_count = std::thread::hardware_concurrency() - 2;
 		if (thread_count == 0) {
-			log_error("Cannot initialize the job system with 0 workers");
+			log_error(L"cannot initialize the job system with 0 workers");
 			log_shutdown_thread();
 			log_shutdown();
 
@@ -1055,7 +1054,7 @@ int run_app(CommandLineArgs cmd_args) {
 	if (s_app.use_keyboard_hook) {
 		init_keyboard_hook(s_app.arena);
 	} else {
-		log_info("running without the keyboard hook");
+		log_info(L"running without the keyboard hook");
 	}
 
 	initialize_app();
@@ -1070,7 +1069,7 @@ int run_app(CommandLineArgs cmd_args) {
 
 	{
 		wait_for_activation();
-		log_info("initial start");
+		log_info(L"initial start");
 
 		window_show(s_app.window);
 	}
@@ -1102,7 +1101,7 @@ int run_app(CommandLineArgs cmd_args) {
 
 	serialize_frequency_scores(Span<const Entry>(s_app.entries.data(), s_app.entries.size()), SEARCH_SCORES_FILE_PATH);
 
-	log_info("terminated");
+	log_info(L"terminated");
 
 	if (s_app.use_keyboard_hook) {
 		shutdown_keyboard_hook();

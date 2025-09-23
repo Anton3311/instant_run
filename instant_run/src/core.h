@@ -175,6 +175,17 @@ inline std::wstring_view wstr_duplicate(const wchar_t* string, Arena& allocator)
 	return std::wstring_view(new_string, length);
 }
 
+// create a copy of a string without null-terminator
+inline std::wstring_view wstr_duplicate(std::wstring_view string, Arena& allocator) {
+	PROFILE_FUNCTION();
+
+	size_t length = string.length();
+	wchar_t* new_string = arena_alloc_array<wchar_t>(allocator, length);
+	memcpy(new_string, string.data(), length * sizeof(string[0]));
+
+	return std::wstring_view(new_string, length);
+}
+
 // create a copy of a string with null-terminator
 inline std::string_view str_duplicate(const char* string, Arena& allocator) {
 	PROFILE_FUNCTION();
@@ -203,15 +214,17 @@ inline std::string_view str_duplicate(std::string_view string, Arena& allocator)
 // String Builder
 //
 
+template<typename T>
 struct StringBuilder {
 	Arena* arena;
-	const char* string;
+	const T* string;
 	size_t length;
 };
 
-inline void str_builder_append(StringBuilder& builder, std::string_view string) {
-	char* buffer = arena_alloc_array<char>(*builder.arena, string.length());
-	memcpy(buffer, string.data(), sizeof(char) * string.length());
+template<typename T>
+inline void str_builder_append(StringBuilder<T>& builder, std::basic_string_view<T> string) {
+	T* buffer = arena_alloc_array<T>(*builder.arena, string.length());
+	memcpy(buffer, string.data(), sizeof(T) * string.length());
 
 	builder.length += string.length();
 
@@ -220,8 +233,9 @@ inline void str_builder_append(StringBuilder& builder, std::string_view string) 
 	}
 }
 
-inline void str_builder_append(StringBuilder& builder, char c) {
-	char* buffer = arena_alloc_array<char>(*builder.arena, 1);
+template<typename T>
+inline void str_builder_append(StringBuilder<T>& builder, T c) {
+	T* buffer = arena_alloc_array<T>(*builder.arena, 1);
 	*buffer = c;
 
 	builder.length += 1;
@@ -231,8 +245,9 @@ inline void str_builder_append(StringBuilder& builder, char c) {
 	}
 }
 
-inline std::string_view str_builder_to_str(const StringBuilder& builder) {
-	return std::string_view(builder.string, builder.length);
+template<typename T>
+inline std::basic_string_view<T> str_builder_to_str(const StringBuilder<T>& builder) {
+	return std::basic_string_view<T>(builder.string, builder.length);
 }
 
 //

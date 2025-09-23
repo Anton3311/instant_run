@@ -5,7 +5,6 @@
 #include "job_system.h"
 
 #include <string>
-#include <iostream>
 
 #include <Windows.h>
 #include <Shlobj.h>
@@ -128,18 +127,18 @@ void platform_log_error_message() {
 
 	DWORD error_code = GetLastError();
 
-	char* message = nullptr;
-	size_t message_length = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER
+	wchar_t* message = nullptr;
+	size_t message_length = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER
 			| FORMAT_MESSAGE_FROM_SYSTEM
 			| FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL,
 			error_code,
 			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			(LPSTR)&message,
+			(LPWSTR)&message,
 			0,
 			NULL);
 
-	log_error(std::string_view(message, message_length));
+	log_error(std::wstring_view(message, message_length));
 
 	LocalFree(message);
 }
@@ -178,7 +177,7 @@ struct KeyboardHook {
 
 static const char* KEYBOARD_HOOK_FUNCTION_NAME = "keyboard_hook";
 static const char* KEYBOARD_HOOK_INIT_FUNCTION_NAME = "init_keyboard_hook";
-static const char* KEYBOARD_HOOK_WORKER_THREAD_NAME = "low_level_keyboard_hook_thread_worker";
+static const wchar_t* KEYBOARD_HOOK_WORKER_THREAD_NAME = L"low_level_keyboard_hook_thread_worker";
 
 void keyboard_hook_thread_worker(KeyboardHookHandle hook) {
 	PROFILE_NAME_THREAD(KEYBOARD_HOOK_WORKER_THREAD_NAME);
@@ -255,15 +254,13 @@ void keyboard_hook_shutdown(KeyboardHookHandle hook) {
 	PROFILE_FUNCTION();
 
  	if (!UnhookWindowsHookEx(hook->hook_handle)) {
-		std::wcout << "Failed to unhook keyboard hook: ";
+		log_error(L"failed to unhook keyboard hook");
 		platform_log_error_message();
-		std::wcout << '\n';
 	}
 
 	if (!PostThreadMessageA(hook->hook_thread_id, WM_QUIT, 0, 0)) {
-		std::wcout << "Failed to post thread quit message: ";
+		log_error(L"failed to post thread quit message");
 		platform_log_error_message();
-		std::wcout << '\n';
 	}
 
 	{
@@ -408,22 +405,21 @@ void window_focus(Window* window) {
 	EnableWindow(window->handle, true);
 
 	if (!BringWindowToTop(window->handle)) {
-		log_error("Failed to bring window to top");
+		log_error(L"failed to bring window to top");
 		platform_log_error_message();
 		return;
 	}
 
 	if (!SetForegroundWindow(window->handle)) {
-		log_error("Failed to set foreground window");
+		log_error(L"failed to set foreground window");
 		return;
 	}
 
 	SetFocus(window->handle);
 
 	if (GetLastError() == 0x57) {
-		std::cout << "Failed to focus window: ";
+		log_error(L"failed to focus window: ");
 		platform_log_error_message();
-		std::cout << '\n';
 		return;
 	}
 }
@@ -898,9 +894,9 @@ static void log_installed_apps_query_error(std::string_view message, const std::
 	Arena& allocator = log_get_fmt_arena();
 
 	ArenaSavePoint format_temp = arena_begin_temp(allocator);
-	StringBuilder builder = { &allocator };
-	str_builder_append(builder, " for a manifest file: ");
-	str_builder_append(builder, manifest_path.string());
+	StringBuilder<wchar_t> builder = { &allocator };
+	str_builder_append<wchar_t>(builder, L" for a manifest file: ");
+	str_builder_append<wchar_t>(builder, manifest_path.wstring());
 
 	log_error(str_builder_to_str(builder));
 
@@ -969,7 +965,7 @@ static IAppxFactory* create_appx_factory() {
 			(LPVOID*)(&factory));
 
 	if (FAILED(result)) {
-		log_error("failed to create 'AppxFactory'");
+		log_error(L"failed to create 'AppxFactory'");
 		return nullptr;
 	}
 
@@ -1083,7 +1079,7 @@ static void task_process_package_batch(const JobContext& job_context, void* user
 				break;
 			} else {
 				if (context->app_descs.count >= context->max_app_descs) {
-					log_error("failed to retrieve all of the application entries from the manifest file, because the reserved buffer is full");
+					log_error(L"failed to retrieve all of the application entries from the manifest file, because the reserved buffer is full");
 					application->Release();
 					break;
 				}
@@ -1133,7 +1129,7 @@ InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) 
 
 	winrt::hstring sid_hstring;
 	if (!query_user_sid_string(temp_arena, &sid_hstring)) {
-		log_error("failed to get SID of the current user");
+		log_error(L"failed to get SID of the current user");
 		return nullptr;
 	}
 
@@ -1206,10 +1202,8 @@ InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) 
 			job_system_submit(task_process_package_batch, &batch);
 		}
 	} catch (const winrt::hresult_error& e) {
-		// TODO: make this flow through the logger
 		winrt::hstring message = e.message();
-		const wchar_t* message_string = message.c_str();
-		std::wcout << message_string << '\n';
+		log_error(std::wstring_view(message.c_str(), message.size()));
 	}
 
 	return query_state;
@@ -1258,7 +1252,7 @@ bool platform_launch_installed_app(const wchar_t* app_id) {
 				(LPVOID*)(&activation_manager));
 
 		if (FAILED(result)) {
-			log_error("failed to create 'IApplicationActivationManager'");
+			log_error(L"failed to create 'IApplicationActivationManager'");
 			return false;
 		}
 	}
@@ -1266,7 +1260,7 @@ bool platform_launch_installed_app(const wchar_t* app_id) {
 	DWORD process_id = 0;
 	HRESULT result = activation_manager->ActivateApplication(app_id, nullptr, AO_NONE, &process_id);
 	if (FAILED(result)) {
-		log_error("failed to launch installed app");
+		log_error(L"failed to launch installed app");
 		return false;
 	}
 
@@ -1403,7 +1397,7 @@ std::filesystem::path fs_resolve_shortcut(const std::filesystem::path& path) {
 	PROFILE_FUNCTION();
 	
 	if (t_shortcut_resolver.state == ShortcutResolverState::Invalid) {
-		log_error("shortcut resolver is invalid");
+		log_error(L"shortcut resolver is invalid");
 		return {};
 	} else if (t_shortcut_resolver.state == ShortcutResolverState::NotCreated) {
 		shortcut_resolver_create_for_thread();

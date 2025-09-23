@@ -77,13 +77,13 @@ static void thread_worker(uint32_t index) {
 	generic_arena.capacity = mb_to_bytes(8);
 
 	{
-		std::string thread_name = std::string("worker") + std::to_string(index);
+		std::wstring thread_name = std::wstring(L"worker") + std::to_wstring(index);
 
 		log_init_thread(logger_arena, thread_name);
 		PROFILE_NAME_THREAD(thread_name.c_str());
 	}
 
-	log_info("worker started");
+	log_info(L"worker started");
 
 	platform_initialize_thread();
 	platform_set_this_thread_affinity_mask(1 << index);
@@ -99,14 +99,14 @@ static void thread_worker(uint32_t index) {
 		bool has_task = try_execute_single_task(context);
 
 		if (!has_task) {
-			log_info("task queue is empty");
+			log_info(L"task queue is empty");
 
 			std::unique_lock lock(s_job_sys_state.wake_mutex);
 			s_job_sys_state.wake_var.wait(lock);
 		}
 	}
 	
-	log_info("worker stopped");
+	log_info(L"worker stopped");
 
 	platform_shutdown_thread();
 
@@ -124,7 +124,7 @@ void job_system_init(uint32_t worker_count) {
 		s_job_sys_state.worker_threads.push_back(std::thread(thread_worker, i));
 	}
 
-	log_info("job system initialized");
+	log_info(L"job system initialized");
 }
 
 uint32_t job_system_get_worker_count() {
@@ -178,5 +178,5 @@ void job_system_shutdown() {
 
 	s_job_sys_state.worker_threads.clear();
 
-	log_info("job system shutdown");
+	log_info(L"job system shutdown");
 }

@@ -4,15 +4,16 @@
 
 #include <stdio.h>
 #include <iostream>
+#include <fstream>
 
 struct LoggerState {
-	FILE* file;
+	std::wofstream file;
 	bool output_to_stdout;
 };
 
 struct LoggerThreadState {
 	Arena* arena;
-	std::string_view name;
+	std::wstring_view name;
 };
 
 static LoggerState s_logger;
@@ -23,18 +24,17 @@ bool log_init(const char* log_file_path, bool output_to_stdout) {
 
 	s_logger.output_to_stdout = output_to_stdout;
 
-	errno_t error = fopen_s(&s_logger.file, log_file_path, "w");
-	if (s_logger.file == nullptr || error == EINVAL) {
-		fclose(s_logger.file);
+	s_logger.file = std::wofstream(log_file_path);
+	if (!s_logger.file.is_open()) {
 		return false;
 	}
 
 	return true;
 }
 
-bool log_init_thread(Arena& arena, std::string_view thread_name) {
+bool log_init_thread(Arena& arena, std::wstring_view thread_name) {
 	t_logger_thread.arena = &arena;
-	t_logger_thread.name = str_duplicate(thread_name, *t_logger_thread.arena);
+	t_logger_thread.name = wstr_duplicate(thread_name, *t_logger_thread.arena);
 	return true;
 }
 
@@ -43,8 +43,8 @@ Arena& log_get_fmt_arena() {
 }
 
 void log_shutdown() {
-	if (s_logger.file) {
-		fclose(s_logger.file);
+	if (s_logger.file.is_open()) {
+		s_logger.file.close();
 	}
 }
 
@@ -52,42 +52,61 @@ void log_shutdown_thread() {
 	t_logger_thread = {};
 }
 
-void log_message(std::string_view message, MessageType message_type) {
+void log_message(std::wstring_view message, MessageType message_type) {
 	PROFILE_FUNCTION();
-	if (s_logger.file == nullptr && !s_logger.output_to_stdout) {
+	if (!s_logger.file.is_open() && !s_logger.output_to_stdout) {
 		return;
 	}
 
-	if (message.data()[message.length() - 1] == '\n') {
+	if (message.data()[message.length() - 1] == L'\n') {
 		message = message.substr(0, message.length() - 1);
 	}
 
 	ArenaSavePoint temp = arena_begin_temp(*t_logger_thread.arena);
-	StringBuilder builder  = StringBuilder { .arena = t_logger_thread.arena };
+	StringBuilder<wchar_t> builder  = StringBuilder<wchar_t> { .arena = t_logger_thread.arena };
 
-	str_builder_append(builder, t_logger_thread.name);
-	str_builder_append(builder, " ");
+	str_builder_append<wchar_t>(builder, t_logger_thread.name);
+	str_builder_append<wchar_t>(builder, L" ");
 
 	switch (message_type) {
 	case MessageType::Info:
-		str_builder_append(builder, "[info] ");
+		str_builder_append<wchar_t>(builder, L"[info] ");
 		break;
 	case MessageType::Error:
-		str_builder_append(builder, "[error] ");
+		str_builder_append<wchar_t>(builder, L"[error] ");
 		break;
 	case MessageType::Warn:
-		str_builder_append(builder, "[warn] ");
+		str_builder_append<wchar_t>(builder, L"[warn] ");
 		break;
 	}
 
-	str_builder_append(builder, message);
-	str_builder_append(builder, "\n");
+	str_builder_append<wchar_t>(builder, message);
+	str_builder_append<wchar_t>(builder, L'\n');
 
-	fwrite(builder.string, sizeof(*builder.string), builder.length, s_logger.file);
+	std::wstring_view logged_message = std::wstring_view(builder.string, builder.length);
+
+	s_logger.file << logged_message;
 
 	if (s_logger.output_to_stdout) {
-		std::cout << std::string_view(builder.string, builder.length);
+		std::wcout << logged_message;
 	}
+
+	arena_end_temp(temp);
+}
+
+void log_message(std::string_view message, MessageType message_type) {
+	if (!s_logger.file.is_open() && !s_logger.output_to_stdout) {
+		return;
+	}
+
+	ArenaSavePoint temp = arena_begin_temp(*t_logger_thread.arena);
+	
+	wchar_t* buffer = arena_alloc_array<wchar_t>(*t_logger_thread.arena, message.length());
+	for (size_t i = 0; i < message.length(); i++) {
+		buffer[i] = message[i];
+	}
+
+	log_message(std::wstring_view(buffer, message.length()), message_type);
 
 	arena_end_temp(temp);
 }

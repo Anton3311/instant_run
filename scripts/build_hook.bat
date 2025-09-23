@@ -1,4 +1,4 @@
-set CMD_ARGS=-m64 -shared
+set CMD_ARGS=-m64 -shared -DUNICODE -D_UNICODE
 set PLATFORM=win
 set ARCH=x86_64
 set APP_NAME=instant_run
@@ -16,6 +16,8 @@ if [%1] == [release] (
 ) else (
 	set BIN_DIR=bin\debug_%PLATFORM%_%ARCH%
 	set BIN_INT_DIR=bin_int\debug_%PLATFORM%_%ARCH%
+
+	set CMD_ARGS=%CMD_ARGS% -g
 )
 
 if not exist %BIN_DIR% mkdir %BIN_DIR%
@@ -23,6 +25,6 @@ if not exist %BIN_INT_DIR% mkdir %BIN_INT_DIR%
 
 clang++ ^
 	%FILES% ^
-	-std=c++20 -g -DUNICODE -D_UNICODE %CMD_ARGS% ^
+	-std=c++20 %CMD_ARGS% ^
 	-lUser32.lib ^
 	-o %BIN_DIR%\%APP_NAME%.dll

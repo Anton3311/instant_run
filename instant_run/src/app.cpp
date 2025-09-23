@@ -13,6 +13,7 @@
 #include <vector>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 static constexpr UVec2 INVALID_ICON_POSITION = UVec2 { UINT32_MAX, UINT32_MAX };
 
@@ -559,15 +560,24 @@ void resolve_shortcuts_task(const JobContext& context, void* data) {
 	}
 }
 
-void walk_directory(const std::filesystem::path& path, std::vector<Entry>& entries) {
+void walk_directory(const std::filesystem::path& path,
+		std::vector<Entry>& entries,
+		std::unordered_set<std::wstring>& used_app_names) {
 	PROFILE_FUNCTION();
 	for (std::filesystem::path child : std::filesystem::directory_iterator(path)) {
 		if (std::filesystem::is_directory(child)) {
-			walk_directory(child, entries);
+			walk_directory(child, entries, used_app_names);
 		} else {
+			std::wstring application_name = child.filename().replace_extension("").wstring();
+			if (used_app_names.contains(application_name)) {
+				continue;
+			}
+
 			Entry& entry = entries.emplace_back();
-			entry.name = child.filename().replace_extension("").wstring();
+			entry.name = std::move(application_name);
 			entry.path = child;
+
+			used_app_names.emplace(entry.name);
 		}
 	}
 }
@@ -666,9 +676,10 @@ void schedule_search_entries_query(Arena& arena, SearchEntriesQuery& query_state
 	std::vector<std::filesystem::path> known_folders = get_user_folders(
 			UserFolderKind::Desktop | UserFolderKind::StartMenu | UserFolderKind::Programs);
 
+	std::unordered_set<std::wstring> used_app_names;
 	for (const auto& known_folder : known_folders) {
 		try {
-			walk_directory(known_folder, s_app.entries);
+			walk_directory(known_folder, s_app.entries, used_app_names);
 		} catch (std::exception e) {
 			log_error(e.what());
 		}

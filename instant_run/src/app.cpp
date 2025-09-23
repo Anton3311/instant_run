@@ -1038,7 +1038,14 @@ int run_app(CommandLineArgs cmd_args) {
 	s_app.arena = {};
 	s_app.arena.capacity = mb_to_bytes(8);
 
-	log_init("log.txt", true);
+	bool log_to_stdout;
+#ifdef BUILD_DEV
+	log_to_stdout = true;
+#else
+	log_to_stdout = false;
+#endif
+
+	log_init("log.txt", log_to_stdout);
 	log_init_thread(s_app.arena, "main");
 
 	log_info(L"logger started");

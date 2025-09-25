@@ -143,6 +143,25 @@ void platform_log_error_message() {
 	LocalFree(message);
 }
 
+void platform_log_lstatus_message(LSTATUS status) {
+	PROFILE_FUNCTION();
+
+	wchar_t* message = nullptr;
+	size_t message_length = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER
+			| FORMAT_MESSAGE_FROM_SYSTEM
+			| FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL,
+			status,
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			(LPWSTR)&message,
+			0,
+			NULL);
+
+	log_error(std::wstring_view(message, message_length));
+
+	LocalFree(message);
+}
+
 ModuleHandle platform_load_library(const char* path) {
 	PROFILE_FUNCTION();
 	return LoadLibraryA(path);
@@ -972,6 +991,91 @@ static IAppxFactory* create_appx_factory() {
 	return factory;
 }
 
+bool check_registry_result(LSTATUS result, std::string_view message) {
+	if (result != ERROR_SUCCESS) {
+		log_error(message);
+		platform_log_lstatus_message(result);
+		return false;
+	}
+	return true;
+}
+
+bool platform_load_installed_apps_from_registry(Arena& temp_arena, Span<std::string_view>* out_key_names) {
+	PROFILE_FUNCTION();
+
+	HKEY packages_key = {};
+
+	LSTATUS result = RegOpenKeyExA(HKEY_CURRENT_USER,
+			"Software\\Classes\\ActivatableClasses\\Package",
+			0,
+			KEY_ENUMERATE_SUB_KEYS | KEY_QUERY_VALUE,
+			&packages_key);
+
+	if (!check_registry_result(result, "failed to open the registry key")) {
+		return false;
+	}
+
+	DWORD max_sub_key_len = 0;
+	DWORD sub_key_count = 0;
+
+	result = RegQueryInfoKeyA(packages_key,
+			NULL, /* lpClass */
+			NULL, /* lpcchClass */
+			NULL, /* lpReserved */
+			&sub_key_count,
+			&max_sub_key_len,
+			NULL, /* lpcbMaxClassLen */
+			NULL, /* lpcValues */
+			NULL, /* lpcbMaxValueNameLen */
+			NULL, /* lpcbMaxValueLen */
+			NULL, /* lpcbSecurityDescriptor */
+			NULL /* lpftLastWriteTime */);
+
+	if (!check_registry_result(result, "failed to query key info")) {
+		return false;
+	}
+
+	// Now enumerate the sub keys
+
+	Span<std::string_view> key_names = Span(
+			arena_alloc_array<std::string_view>(temp_arena, sub_key_count),
+			sub_key_count); 
+
+	for (size_t sub_key_index = 0; sub_key_index < sub_key_count; sub_key_index++) {
+		char* sub_key_name_buffer = arena_alloc_array<char>(temp_arena, max_sub_key_len + 1);
+
+		DWORD name_length = max_sub_key_len;
+		result = RegEnumKeyExA(packages_key,
+				(DWORD)sub_key_index,
+				sub_key_name_buffer,
+				&name_length,
+				NULL,
+				NULL,
+				NULL,
+				NULL);
+
+		if (result == ERROR_NO_MORE_ITEMS) {
+			break;
+		}
+
+		if (result != ERROR_MORE_DATA) {
+			if (!check_registry_result(result, "failed to enum sub keys")) {
+				return false;
+			}
+		}
+
+		std::string_view key_name = std::string_view(sub_key_name_buffer, name_length);
+		key_names[sub_key_index] = key_name;
+	}
+
+	result = RegCloseKey(packages_key);
+	check_registry_result(result, "failed to close the registry key");
+
+	*out_key_names = key_names;
+
+	return true;
+}
+
 static void task_process_package_batch(const JobContext& job_context, void* user_data) {
 	PROFILE_FUNCTION();
 
@@ -1119,6 +1223,18 @@ struct InstalledAppsQueryState {
 // Thanks to https://github.com/christophpurrer/cppwinrt-clang/blob/master/build.bat
 InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) {
 	PROFILE_FUNCTION();
+
+	{
+		ArenaSavePoint temp = arena_begin_temp(temp_arena);
+		Span<std::string_view> key_names;
+		if (platform_load_installed_apps_from_registry(temp_arena, &key_names)) {
+			for (std::string_view key_name : key_names) {
+				log_info(key_name);
+			}
+		}
+
+		arena_end_temp(temp);
+	}
 
 	using namespace winrt;
 	using namespace Windows::ApplicationModel;

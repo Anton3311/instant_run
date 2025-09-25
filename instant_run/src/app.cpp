@@ -4,6 +4,7 @@
 #include "ui.h"
 #include "log.h"
 #include "job_system.h"
+#include "xml.h"
 
 #include "hook_config.h"
 

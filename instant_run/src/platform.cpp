@@ -3,8 +3,10 @@
 #include "hook_config.h"
 #include "log.h"
 #include "job_system.h"
+#include "xml.h"
 
 #include <string>
+#include <fstream>
 
 #include <Windows.h>
 #include <Shlobj.h>
@@ -971,6 +973,7 @@ struct alignas(64) PackageProcessingTaskContext {
 	Span<winrt::Windows::ApplicationModel::Package> packages;
 	Span<InstalledAppDesc> app_descs;
 	uint32_t max_app_descs;
+	const std::unordered_map<std::string_view, std::string_view>* installed_app_name_version_to_app_id;
 };
 
 static IAppxFactory* create_appx_factory() {
@@ -1074,6 +1077,182 @@ bool platform_load_installed_apps_from_registry(Arena& temp_arena, Span<std::str
 	*out_key_names = key_names;
 
 	return true;
+}
+
+static bool read_text_file(const std::filesystem::path& path, Arena& arena, std::string_view* out_content) {
+	PROFILE_FUNCTION();
+
+	std::ifstream stream(path);
+	if (!stream.is_open()) {
+		return false;
+	}
+
+	stream.seekg(0, std::ios::end);
+	size_t size = stream.tellg();
+	stream.seekg(0, std::ios::beg);
+
+	ArenaSavePoint temp = arena_begin_temp(arena);
+	char* buffer = arena_alloc_array<char>(arena, size);
+
+	stream.read(buffer, size);
+
+	*out_content = std::string_view(buffer, size);
+
+	return true;
+}
+
+static wchar_t* string_to_wide(const char* string, Arena& arena) {
+	PROFILE_FUNCTION();
+
+	ArenaSavePoint temp = arena_begin_temp(arena);
+	
+	size_t string_length = strlen(string);
+	wchar_t* buffer = arena_alloc_array<wchar_t>(arena, string_length + 1);
+
+	size_t chars_converted = 0;
+	errno_t error = mbstowcs_s(&chars_converted, buffer, string_length + 1, string, string_length);
+
+	if (error == 0) {
+		return buffer;
+	}
+
+	// delete the allocated buffer, because the convertion failed
+	arena_end_temp(temp);
+
+	return nullptr;
+}
+
+static wchar_t* build_full_app_user_model_id(std::string_view package_name,
+		std::string_view app_id_part,
+		std::string_view app_id,
+		Arena& arena) {
+	PROFILE_FUNCTION();
+
+	StringBuilder<char> builder = { &arena };
+	str_builder_append<char>(builder, package_name);
+	str_builder_append<char>(builder, '_');
+	str_builder_append<char>(builder, app_id_part);
+	str_builder_append<char>(builder, '!');
+	str_builder_append<char>(builder, app_id);
+
+	return string_to_wide(str_builder_to_cstr(builder), arena);
+}
+
+static void task_process_package_batch_exprimental(const JobContext& job_context, void* user_data) {
+	PROFILE_FUNCTION();
+
+	using namespace winrt;
+	using namespace Windows::ApplicationModel;
+	using namespace Windows::Management::Deployment;
+	using namespace Windows::Storage;
+	using namespace Windows::Foundation::Collections;
+	using namespace Windows::Foundation;
+
+	PackageProcessingTaskContext* context = reinterpret_cast<PackageProcessingTaskContext*>(user_data);
+	IAppxFactory* factory = context->factories[job_context.worker_index];
+
+	Arena& allocator = job_context.arena;
+
+	for (const auto& package : context->packages) {
+		std::filesystem::path install_path = package.InstalledPath().c_str();
+		std::filesystem::path manifest_path = install_path / "AppxManifest.xml";
+
+		if (!std::filesystem::exists(manifest_path)) {
+			continue;
+		}
+
+		std::wstring_view logo_uri;
+		std::wstring_view display_name;
+
+		{
+			PROFILE_SCOPE("get_display_name_and_logo_uri");
+			winrt::hstring logo_uri_string = Uri::UnescapeComponent(package.Logo().Path());
+
+			// HACK: After all of the convertions of the URI, it is left with forward slash at the start.
+			//       So get rid of it.
+			logo_uri = wstr_duplicate(logo_uri_string.c_str() + 1, allocator);
+			display_name = wstr_duplicate(package.DisplayName().c_str(), allocator);
+		}
+
+		ArenaSavePoint temp = arena_begin_temp(allocator);
+		std::string_view appx_manifest_content;
+		if (!read_text_file(manifest_path, allocator, &appx_manifest_content)) {
+			arena_end_temp(temp);
+
+			log_error("failed to read AppxManifest.xml");
+			continue;
+		}
+
+		// HACK: Skip utf-8 byte order mark
+		if (appx_manifest_content.length() >= 3) {
+			if ((uint8_t)appx_manifest_content[0] == 0xef
+					&& (uint8_t)appx_manifest_content[1] == 0xbb
+					&& (uint8_t)appx_manifest_content[2] == 0xbf) {
+				appx_manifest_content = appx_manifest_content.substr(3);
+			}
+		}
+
+		XMLDocument xml_document = xml_parse(appx_manifest_content, allocator);
+
+		if (!xml_document.root) {
+			log_error("failed to parse AppxManifest.xml");
+		} else {
+			std::string_view package_name;
+			std::string_view package_version;
+
+			if (XMLTag* identity_tag = xml_tag_find_child(xml_document.root, "Identity")) {
+				for (XMLAttribute attrib : identity_tag->attributes) {
+					if (attrib.name == "Name") {
+						package_name = attrib.value;
+					} else if (attrib.name == "Version") {
+						package_version = attrib.value;
+					}
+				}
+			}
+
+			if (XMLTag* application_list = xml_tag_find_child(xml_document.root, "Applications")) {
+				for (XMLTag* application_info = application_list->first_child;
+						application_info != nullptr;
+						application_info = application_info->next_sibling) {
+
+					if (XMLAttribute* id_attrib = xml_tag_find_attrib(application_info, "Id")) {
+						std::string_view app_id = id_attrib->value;
+
+						ArenaSavePoint lookup_temp = arena_begin_temp(allocator);
+						StringBuilder<char> key_builder = { &allocator };
+
+						str_builder_append<char>(key_builder, package_name);
+						str_builder_append<char>(key_builder, '_');
+						str_builder_append<char>(key_builder, package_version);
+
+						std::string_view key = str_builder_to_str<char>(key_builder);
+
+						auto it = context->installed_app_name_version_to_app_id->find(key);
+						if (it == context->installed_app_name_version_to_app_id->end()) {
+							log_error("failed to resolve app user model id");
+						} else {
+							std::string_view partial_app_id = it->second;
+
+							const wchar_t* app_user_model_id = build_full_app_user_model_id(package_name,
+									partial_app_id,
+									app_id,
+									allocator);
+
+							context->app_descs.count += 1;
+							InstalledAppDesc& desc = context->app_descs[context->app_descs.count - 1];
+							desc.id = app_user_model_id;
+							desc.display_name = display_name;
+							desc.logo_uri = logo_uri;
+						}
+
+						arena_end_temp(lookup_temp);
+					}
+				}
+			}
+		}
+	
+		arena_end_temp(temp);
+	}
 }
 
 static void task_process_package_batch(const JobContext& job_context, void* user_data) {
@@ -1217,24 +1396,16 @@ static void task_process_package_batch(const JobContext& job_context, void* user
 struct InstalledAppsQueryState {
 	uint32_t worker_count;
 	IAppxFactory** factories_per_worker;
+	Span<std::string_view> key_names;
 	std::vector<PackageProcessingTaskContext> batches;
+	std::unordered_map<std::string_view, std::string_view> installed_app_name_version_to_app_id;
 };
 
 // Thanks to https://github.com/christophpurrer/cppwinrt-clang/blob/master/build.bat
 InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) {
 	PROFILE_FUNCTION();
 
-	{
-		ArenaSavePoint temp = arena_begin_temp(temp_arena);
-		Span<std::string_view> key_names;
-		if (platform_load_installed_apps_from_registry(temp_arena, &key_names)) {
-			for (std::string_view key_name : key_names) {
-				log_info(key_name);
-			}
-		}
-
-		arena_end_temp(temp);
-	}
+	bool expreimental = true;
 
 	using namespace winrt;
 	using namespace Windows::ApplicationModel;
@@ -1253,6 +1424,42 @@ InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) 
 
 	// HACK: Allocated in the arena, thus need to manually default construct
 	new (query_state) InstalledAppsQueryState();
+
+	if (expreimental)
+	{
+		if (!platform_load_installed_apps_from_registry(temp_arena, &query_state->key_names)) {
+			return nullptr;
+		}
+
+		for (std::string_view registry_key_name : query_state->key_names) {
+			size_t name_version_separator = registry_key_name.find_first_of('_');
+			
+			if (name_version_separator == std::string_view::npos) {
+				log_error("failed to parse registry key");
+				log_error(registry_key_name);
+				break;
+			}
+
+			size_t second_separator = registry_key_name.find_first_of('_', name_version_separator + 1);
+			if (second_separator == std::string_view::npos) {
+				log_error("failed to parse registry key");
+				log_error(registry_key_name);
+				break;
+			}
+
+			std::string_view name_version_part = registry_key_name.substr(0, second_separator);
+
+			size_t last_separator = registry_key_name.find_last_of('_');
+			if (last_separator == std::string_view::npos) {
+				log_error("failed to parse registry key");
+				log_error(registry_key_name);
+				break;
+			}
+
+			std::string_view app_id_part = registry_key_name.substr(last_separator + 1);
+			query_state->installed_app_name_version_to_app_id.emplace(name_version_part, app_id_part);
+		}
+	}
 
 	// TODO: Move this to the `platform_initialize`
 	{
@@ -1297,6 +1504,7 @@ InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) 
 					current_batch->packages = Span<Package>(package_buffer, 0);
 					current_batch->app_descs = Span<InstalledAppDesc>(descs, 0);
 					current_batch->max_app_descs = max_app_descs_per_batch;
+					current_batch->installed_app_name_version_to_app_id = &query_state->installed_app_name_version_to_app_id;
 				}
 
 				// increment the count first, to avoid an out of bounds panic in the `Span<T>`
@@ -1314,8 +1522,14 @@ InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) 
 		}
 
 		// submit jobs
-		for (auto& batch : query_state->batches) {
-			job_system_submit(task_process_package_batch, &batch);
+		if (expreimental) {
+			for (auto& batch : query_state->batches) {
+				job_system_submit(task_process_package_batch_exprimental, &batch);
+			}
+		} else {
+			for (auto& batch : query_state->batches) {
+				job_system_submit(task_process_package_batch, &batch);
+			}
 		}
 	} catch (const winrt::hresult_error& e) {
 		winrt::hstring message = e.message();

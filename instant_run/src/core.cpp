@@ -54,7 +54,7 @@ void arena_commit_page(Arena& arena, size_t page_count) {
 	PROFILE_FUNCTION();
 
 	size_t commit_size = page_count * s_sys_mem_spec.page_size;
-	if (arena.commited + page_count >= arena.capacity) {
+	if (arena.commited + commit_size >= arena.capacity) {
 		printf("Out of arena memory");
 		assert(false);
 	}

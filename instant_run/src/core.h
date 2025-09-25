@@ -250,3 +250,9 @@ inline std::basic_string_view<T> str_builder_to_str(const StringBuilder<T>& buil
 	return std::basic_string_view<T>(builder.string, builder.length);
 }
 
+template<typename T>
+inline const T* str_builder_to_cstr(StringBuilder<T>& builder) {
+	str_builder_append<T>(builder, (T)0);
+	return builder.string;
+}
+

@@ -1196,6 +1196,8 @@ static void task_process_package_batch_exprimental(const JobContext& job_context
 
 		if (!xml_document.root) {
 			log_error("failed to parse AppxManifest.xml");
+
+			XMLDocument xml_document2 = xml_parse(appx_manifest_content, allocator);
 		} else {
 			std::string_view package_name;
 			std::string_view package_version;

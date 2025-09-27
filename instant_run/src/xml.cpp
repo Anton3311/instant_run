@@ -1,6 +1,7 @@
 #include "xml.h"
 
 #include "core.h"
+#include "log.h"
 
 #include <cstring>
 #include <cctype>
@@ -35,7 +36,7 @@ inline static std::string_view parse_ident(ParserState& state) {
 	while (!is_eof(state)) {
 		char current_char = state.string[state.read_position];
 
-		if (std::isalnum(current_char) || current_char == ':') {
+		if (std::isalnum(current_char) || current_char == ':' || current_char == '.') {
 			state.read_position += 1;
 		} else {
 			break;
@@ -77,12 +78,66 @@ inline static bool parse_string(ParserState& state, std::string_view* out_string
 	return false;
 }
 
-inline static XMLTag* parse_tag(ParserState& state) {
+inline static bool skip_comment(ParserState& state) {
 	PROFILE_FUNCTION();
 
 	skip_whitespace(state);
 
+	std::string_view comment_start = "<!--";
+	std::string_view comment_end = "-->";
+
+	if (state.string[state.read_position] != comment_start[0]) {
+		return false;
+	}
+
+	if (state.read_position + comment_start.length() > state.string.length()) {
+		// the comment start cannot fit in the string that is left
+		return false;
+	}
+
+	std::string_view maybe_comment_start = state.string.substr(state.read_position, comment_start.length());
+
+	if (maybe_comment_start == comment_start) {
+		// we have a comment
+
+		state.read_position += comment_start.length();
+
+		while (!is_eof(state)) {
+			if (state.string[state.read_position] == comment_end[0]) {
+				if (state.read_position + comment_end.length() <= state.string.length()) {
+					std::string_view maybe_comment_end = state.string.substr(state.read_position, comment_end.length());
+
+					if (maybe_comment_end == comment_end) {
+						// parsed the comment
+						state.read_position += comment_end.length();
+						return true;
+					}
+				}
+			}
+
+			state.read_position += 1;
+		}
+	}
+
+	return false;
+}
+
+inline static void skip_whitespace_and_comments(ParserState& state) {
+	PROFILE_FUNCTION();
+
+	while (skip_comment(state)) {
+	}
+
+	skip_whitespace(state);
+}
+
+inline static XMLTag* parse_tag(ParserState& state) {
+	PROFILE_FUNCTION();
+
+	skip_whitespace_and_comments(state);
+	
 	if (!consume_char(state, '<')) {
+		log_error("expected '<' at the start of the tag");
 		return nullptr;
 	}
 
@@ -98,9 +153,10 @@ inline static XMLTag* parse_tag(ParserState& state) {
 	tag->attributes = {};
 
 	while (true) {
-		skip_whitespace(state);
+		skip_whitespace_and_comments(state);
 
 		if (is_eof(state)) {
+			log_error("reached eof");
 			return nullptr;
 		}
 
@@ -109,18 +165,21 @@ inline static XMLTag* parse_tag(ParserState& state) {
 			state.read_position += 1;
 
 			if (!consume_char(state, '>')) {
+				log_error("expected '>' at the end of the tag");
 				return nullptr;
 			}
 
 			return tag;
 		} else if (current_char == '?') {
 			if (!has_quastion_mark) {
+				log_error("expected '?'");
 				return nullptr;
 			}
 
 			state.read_position += 1;
 
 			if (!consume_char(state, '>')) {
+				log_error("expected '>' at the end of the tag");
 				return nullptr;
 			}
 
@@ -131,25 +190,30 @@ inline static XMLTag* parse_tag(ParserState& state) {
 			XMLTag* last_child_tag = nullptr;
 
 			while (true) {
-				skip_whitespace(state);
+				skip_whitespace_and_comments(state);
 
 				if (is_eof(state)) {
+					log_error("reached eof");
 					return nullptr;
 				}
 
 				char current_char = state.string[state.read_position];
-				if (current_char == '<'
-						&& state.read_position + 1 < state.string.length()
-						&& state.string[state.read_position + 1] == '/') {
+				char next_char = (state.read_position + 1 < state.string.length())
+					? state.string[state.read_position + 1]
+					: 0;
+
+				if (current_char == '<' && next_char == '/') {
 					state.read_position += 2;
 
 					std::string_view closing_tag_name = parse_ident(state);
 
 					if (!consume_char(state, '>')) {
+						log_error("expected '>' at the end of the tag");
 						return nullptr;
 					}
 
 					if (tag_name != closing_tag_name) {
+						log_error("missmatch of opening and closing tags");
 						return nullptr;
 					}
 
@@ -157,6 +221,8 @@ inline static XMLTag* parse_tag(ParserState& state) {
 				} else if (current_char == '<') {
 					// we have a child tag
 					XMLTag* child_tag = parse_tag(state);
+
+					assert(child_tag);
 
 					if (last_child_tag == nullptr) {
 						tag->first_child = child_tag;
@@ -191,16 +257,18 @@ inline static XMLTag* parse_tag(ParserState& state) {
 
 			std::string_view attr_name = parse_ident(state);
 
-			skip_whitespace(state);
+			skip_whitespace_and_comments(state);
 
 			if (!consume_char(state, '=')) {
+				log_error("expected '=' after attrib name");
 				return nullptr;
 			}
 
-			skip_whitespace(state);
+			skip_whitespace_and_comments(state);
 
 			std::string_view attr_value;
 			if (!parse_string(state, &attr_value)) {
+				log_error("expected attrib value");
 				return nullptr;
 			}
 

@@ -329,6 +329,7 @@ static constexpr size_t EVENT_BUFFER_SIZE = 8;
 
 struct Window {
 	std::wstring title;
+	WindowConfig config;
 	uint32_t width;
 	uint32_t height;
 
@@ -347,12 +348,13 @@ bool create_opengl_context(Window* window);
 bool init_opengl(Window* window);
 bool translate_key_code(WPARAM virtual_key_code, KeyCode& output);
 
-Window* window_create(uint32_t width, uint32_t height, std::wstring_view title) {
+Window* window_create(uint32_t width, uint32_t height, std::wstring_view title, const WindowConfig& config) {
 	PROFILE_FUNCTION();
 	Window* window = new Window();
 	window->title = title;
 	window->width = width;
 	window->height = height;
+	window->config = config;
 
 	WNDCLASSW window_class{};
 	window_class.lpfnWndProc = window_procedure;
@@ -360,8 +362,7 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title) 
 	window_class.lpszClassName = WINDOW_CLASS_NAME;
 	window_class.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
 
-	if (!RegisterClassW(&window_class))
-	{
+	if (!RegisterClassW(&window_class)) {
 		return nullptr;
 	}
 
@@ -379,10 +380,19 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title) 
 		}
 	}
 
-	window->handle = CreateWindowExW(0,
+	DWORD extended_window_style = 0;
+	DWORD window_style = 0;
+
+	if (config.is_tool_window) {
+		extended_window_style = WS_EX_TOOLWINDOW;
+	} else {
+		window_style = WS_POPUP;
+	}
+
+	window->handle = CreateWindowExW(extended_window_style,
 		WINDOW_CLASS_NAME,
 		window->title.c_str(),
-		WS_POPUP,
+		window_style,
 		window_x,
 		window_y,
 		static_cast<int>(window->width),

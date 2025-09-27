@@ -799,7 +799,11 @@ Rect create_icon(UVec2 position, const Texture& texture) {
 
 void initialize_app() {
 	PROFILE_FUNCTION();
-	s_app.window = window_create(800, 500, L"Instant Run");
+
+	WindowConfig window_config{};
+	window_config.is_tool_window = s_app.use_keyboard_hook;
+
+	s_app.window = window_create(800, 500, L"Instant Run", window_config);
 	s_app.use_exprimental_ms_store_query_method = false;
 
 	initialize_renderer(s_app.window);

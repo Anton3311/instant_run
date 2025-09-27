@@ -96,8 +96,6 @@ struct WindowEvent {
 	} data;
 };
 
-struct Window;
-
 void platform_initialize();
 void platform_shutdown();
 
@@ -131,7 +129,16 @@ void keyboard_hook_shutdown(KeyboardHookHandle hook);
 // Windows
 //
 
-Window* window_create(uint32_t width, uint32_t height, std::wstring_view title);
+struct Window;
+
+struct WindowConfig {
+	bool is_tool_window;
+};
+
+Window* window_create(uint32_t width,
+		uint32_t height,
+		std::wstring_view title,
+		const WindowConfig& config);
 
 void window_show(Window* window);
 void window_hide(Window* window);

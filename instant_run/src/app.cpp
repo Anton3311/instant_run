@@ -421,7 +421,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	return action;
 }
 
-void process_result_view_key_event(ResultViewState& state, KeyCode key) {
+void process_result_view_key_event(ResultViewState& state, KeyCode key, KeyModifiers modifiers) {
 	size_t result_count = state.matches.size();
 
 	switch (key) {
@@ -430,6 +430,13 @@ void process_result_view_key_event(ResultViewState& state, KeyCode key) {
 		break;
 	case KeyCode::ArrowDown:
 		state.selected_index = (state.selected_index + 1) % result_count;
+		break;
+	case KeyCode::Tab:
+		if (HAS_FLAG(modifiers, KeyModifiers::Shift)) {
+			state.selected_index = (state.selected_index + result_count - 1) % result_count;
+		} else {
+			state.selected_index = (state.selected_index + 1) % result_count;
+		}
 		break;
 	default:
 		break;
@@ -892,7 +899,7 @@ void run_app_frame() {
 					break;
 #endif
 				default:
-					process_result_view_key_event(s_app.result_view_state, key_event.code);
+					process_result_view_key_event(s_app.result_view_state, key_event.code, key_event.modifiers);
 					break;
 				}
 			}

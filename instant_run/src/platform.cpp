@@ -830,6 +830,9 @@ bool translate_key_code(WPARAM virtual_key_code, KeyCode& output) {
 	case VK_END:
 		output = KeyCode::End;
 		return true;
+	case VK_TAB:
+		output = KeyCode::Tab;
+		return true;
 	case VK_DELETE:
 		output = KeyCode::Delete;
 		return true;

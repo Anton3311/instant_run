@@ -46,6 +46,7 @@ enum class KeyCode {
 	Enter,
 	Backspace,
 	Delete,
+	Tab,
 
 	ArrowUp,
 	ArrowDown,

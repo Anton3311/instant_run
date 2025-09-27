@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <windows.h>
+#include <fstream>
 
 typedef struct {
 	size_t page_size;
@@ -98,3 +99,85 @@ void arena_release(Arena& arena) {
 	arena.commited = 0;
 }
 
+//
+// String
+//
+
+wchar_t* cstring_to_wide(const char* string, Arena& arena) {
+	PROFILE_FUNCTION();
+
+	ArenaSavePoint temp = arena_begin_temp(arena);
+	
+	size_t string_length = strlen(string);
+	wchar_t* buffer = arena_alloc_array<wchar_t>(arena, string_length + 1);
+
+	size_t chars_converted = 0;
+	errno_t error = mbstowcs_s(&chars_converted,
+			buffer,
+			string_length + 1,
+			string,
+			string_length);
+
+	if (error == 0) {
+		return buffer;
+	}
+
+	// delete the allocated buffer, because the convertion failed
+	arena_end_temp(temp);
+	return nullptr;
+}
+
+std::wstring_view string_to_wide(std::string_view string, Arena& arena) {
+	PROFILE_FUNCTION();
+
+	ArenaSavePoint temp = arena_begin_temp(arena);
+	
+	size_t string_length = string.length();
+
+	// Allocate with one extra char for a null-terminator
+	wchar_t* buffer = arena_alloc_array<wchar_t>(arena, string_length + 1);
+
+	size_t chars_converted = 0;
+	errno_t error = mbstowcs_s(&chars_converted,
+			buffer,
+			string_length + 1,
+			string.data(),
+			string_length);
+
+	if (error == 0) {
+		// Get rid of the null-terminator, by moving
+		// the arena pointer back (deallocating it from the arena)
+		arena.allocated -= sizeof(*buffer);
+		return std::wstring_view(buffer, chars_converted - 1);
+	}
+
+	// delete the allocated buffer, because the convertion failed
+	arena_end_temp(temp);
+	return nullptr;
+}
+
+//
+// File IO
+//
+
+bool read_text_file(const std::filesystem::path& path, Arena& arena, std::string_view* out_content) {
+	PROFILE_FUNCTION();
+
+	std::ifstream stream(path);
+	if (!stream.is_open()) {
+		return false;
+	}
+
+	stream.seekg(0, std::ios::end);
+	size_t size = stream.tellg();
+	stream.seekg(0, std::ios::beg);
+
+	ArenaSavePoint temp = arena_begin_temp(arena);
+	char* buffer = arena_alloc_array<char>(arena, size);
+
+	stream.read(buffer, size);
+
+	*out_content = std::string_view(buffer, size);
+
+	return true;
+}

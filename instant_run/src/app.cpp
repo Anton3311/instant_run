@@ -683,7 +683,7 @@ void schedule_search_entries_query(Arena& arena, SearchEntriesQuery& query_state
 		try {
 			walk_directory(known_folder, s_app.entries, used_app_names);
 		} catch (std::exception e) {
-			// log_error(e.what());
+			log_error(e.what());
 		}
 	}
 

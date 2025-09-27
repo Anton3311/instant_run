@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <string_view>
+#include <filesystem>
 
 #ifdef ENABLE_PROFILING 
 #include <tracy/Tracy.hpp>
@@ -223,6 +224,12 @@ inline std::string_view str_duplicate(std::string_view string, Arena& allocator)
 	return std::string_view(new_string, length);
 }
 
+// Converts a C string to wide string with a null-terminator
+wchar_t* cstring_to_wide(const char* string, Arena& arena);
+
+// Converts a string to wide string without a null-terminator
+std::wstring_view string_to_wide(std::string_view string, Arena& arena);
+
 //
 // String Builder
 //
@@ -269,3 +276,8 @@ inline const T* str_builder_to_cstr(StringBuilder<T>& builder) {
 	return builder.string;
 }
 
+//
+// File IO
+//
+
+bool read_text_file(const std::filesystem::path& path, Arena& arena, std::string_view* out_content);

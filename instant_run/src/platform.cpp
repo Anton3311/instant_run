@@ -1079,49 +1079,6 @@ bool platform_load_installed_apps_from_registry(Arena& temp_arena, Span<std::str
 	return true;
 }
 
-static bool read_text_file(const std::filesystem::path& path, Arena& arena, std::string_view* out_content) {
-	PROFILE_FUNCTION();
-
-	std::ifstream stream(path);
-	if (!stream.is_open()) {
-		return false;
-	}
-
-	stream.seekg(0, std::ios::end);
-	size_t size = stream.tellg();
-	stream.seekg(0, std::ios::beg);
-
-	ArenaSavePoint temp = arena_begin_temp(arena);
-	char* buffer = arena_alloc_array<char>(arena, size);
-
-	stream.read(buffer, size);
-
-	*out_content = std::string_view(buffer, size);
-
-	return true;
-}
-
-static wchar_t* string_to_wide(const char* string, Arena& arena) {
-	PROFILE_FUNCTION();
-
-	ArenaSavePoint temp = arena_begin_temp(arena);
-	
-	size_t string_length = strlen(string);
-	wchar_t* buffer = arena_alloc_array<wchar_t>(arena, string_length + 1);
-
-	size_t chars_converted = 0;
-	errno_t error = mbstowcs_s(&chars_converted, buffer, string_length + 1, string, string_length);
-
-	if (error == 0) {
-		return buffer;
-	}
-
-	// delete the allocated buffer, because the convertion failed
-	arena_end_temp(temp);
-
-	return nullptr;
-}
-
 static wchar_t* build_full_app_user_model_id(std::string_view package_name,
 		std::string_view app_id_part,
 		std::string_view app_id,
@@ -1135,7 +1092,7 @@ static wchar_t* build_full_app_user_model_id(std::string_view package_name,
 	str_builder_append<char>(builder, '!');
 	str_builder_append<char>(builder, app_id);
 
-	return string_to_wide(str_builder_to_cstr(builder), arena);
+	return cstring_to_wide(str_builder_to_cstr(builder), arena);
 }
 
 static void task_process_package_batch_experimental(const JobContext& job_context, void* user_data) {
@@ -1161,17 +1118,11 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 			continue;
 		}
 
-		std::wstring_view logo_uri;
 		std::wstring_view display_name;
 
 		{
-			PROFILE_SCOPE("get_display_name_and_logo_uri");
-			winrt::hstring logo_uri_string = Uri::UnescapeComponent(package.Logo().Path());
-
-			// HACK: After all of the convertions of the URI, it is left with forward slash at the start.
-			//       So get rid of it.
-			logo_uri = wstr_duplicate(logo_uri_string.c_str() + 1, allocator);
-			display_name = wstr_duplicate(package.DisplayName().c_str(), allocator);
+			PROFILE_SCOPE("get_display_name");
+			wstr_duplicate(package.DisplayName().c_str(), allocator);
 		}
 
 		ArenaSavePoint temp = arena_begin_temp(allocator);
@@ -1201,6 +1152,7 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 		} else {
 			std::string_view package_name;
 			std::string_view package_version;
+			std::wstring_view logo_path;
 
 			if (XMLTag* identity_tag = xml_tag_find_child(xml_document.root, "Identity")) {
 				for (XMLAttribute attrib : identity_tag->attributes) {
@@ -1209,6 +1161,12 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 					} else if (attrib.name == "Version") {
 						package_version = attrib.value;
 					}
+				}
+			}
+
+			if (XMLTag* properties_tag = xml_tag_find_child(xml_document.root, "Properties")) {
+				if (XMLTag* logo_tag = xml_tag_find_child(properties_tag, "Logo")) {
+					logo_path = wstr_duplicate((install_path / logo_tag->value).c_str(), allocator);
 				}
 			}
 
@@ -1240,11 +1198,12 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 									app_id,
 									allocator);
 
+
 							context->app_descs.count += 1;
 							InstalledAppDesc& desc = context->app_descs[context->app_descs.count - 1];
 							desc.id = app_user_model_id;
 							desc.display_name = display_name;
-							desc.logo_uri = logo_uri;
+							desc.logo_uri = logo_path;
 						}
 
 						arena_end_temp(lookup_temp);

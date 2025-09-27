@@ -88,6 +88,7 @@ struct App {
 
 	// App state
 	bool use_keyboard_hook;
+	bool use_exprimental_ms_store_query_method;
 	Font font;
 	Arena arena;
 	Window* window;
@@ -688,7 +689,8 @@ void schedule_search_entries_query(Arena& arena, SearchEntriesQuery& query_state
 
 	job_system_submit(resolve_shortcuts_task, s_app.entries.data(), s_app.entries.size());
 
-	query_state.installed_apps_query = platform_begin_installed_apps_query(arena);
+	query_state.installed_apps_query = platform_begin_installed_apps_query(arena,
+			s_app.use_exprimental_ms_store_query_method);
 }
 
 void collect_search_entries_query_result(Arena& arena, SearchEntriesQuery& query_state) {
@@ -791,6 +793,7 @@ Rect create_icon(UVec2 position, const Texture& texture) {
 void initialize_app() {
 	PROFILE_FUNCTION();
 	s_app.window = window_create(800, 500, L"Instant Run");
+	s_app.use_exprimental_ms_store_query_method = false;
 
 	initialize_renderer(s_app.window);
 	initialize_app_icon_storage(s_app.app_icon_storage, 32, 32);
@@ -1027,10 +1030,15 @@ static constexpr const char* SEARCH_SCORES_FILE_PATH = "search_scores";
 
 int run_app(CommandLineArgs cmd_args) {
 	s_app.use_keyboard_hook = true;
-	if (cmd_args.count == 2) {
-		std::wstring_view arg1 = cmd_args.arguments[1];
-		if (arg1 == L"--no-hook") {
-			s_app.use_keyboard_hook = false;
+	if (cmd_args.count > 1) {
+		for (size_t i = 0; i < cmd_args.count; i++) {
+			std::wstring_view arg = cmd_args.arguments[i];
+
+			if (arg == L"--no-hook") {
+				s_app.use_keyboard_hook = false;
+			} else if (arg == L"--experimental-ms-store-query") {
+				s_app.use_exprimental_ms_store_query_method = true;
+			}
 		}
 	}
 

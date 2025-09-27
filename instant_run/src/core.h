@@ -53,6 +53,14 @@ struct Span {
 	Span(T* values, size_t count)
 		: values(values), count(count) {}
 
+	inline Span<T> slice(size_t start, size_t slice_length) {
+		if (start + slice_length > count) {
+			__debugbreak();
+		}
+
+		return Span<T>(values + start, slice_length);
+	}
+
 	inline T& operator[](size_t index) {
 		if (index >= count) {
 			__debugbreak(); // TODO: assert
@@ -121,6 +129,11 @@ inline T* arena_alloc(Arena& arena) {
 template<typename T>
 inline T* arena_alloc_array(Arena& arena, size_t count) {
 	return reinterpret_cast<T*>(arena_alloc_aligned(arena, sizeof(T) * count, alignof(T)));
+}
+
+template<typename T>
+inline Span<T> arena_alloc_span(Arena& arena, size_t count) {
+	return Span<T>(arena_alloc_array<T>(arena, count), count);
 }
 
 inline std::wstring_view arena_push_string(Arena& arena, std::wstring_view string) {

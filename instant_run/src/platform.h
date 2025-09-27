@@ -179,7 +179,7 @@ struct InstalledAppsQueryState;
 // Returns `nullptr` in case of failure.
 //
 // Not safe to clear the `temp_arena` until the `platform_finish_installed_apps_query` has completed.
-InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena);
+InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena, bool exprimental = false);
 
 // Waits until all the jobs scheduled by `platform_begin_installed_apps_query` and then collects the result.
 std::vector<InstalledAppDesc> platform_finish_installed_apps_query(InstalledAppsQueryState* query_state,

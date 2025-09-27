@@ -1138,7 +1138,7 @@ static wchar_t* build_full_app_user_model_id(std::string_view package_name,
 	return string_to_wide(str_builder_to_cstr(builder), arena);
 }
 
-static void task_process_package_batch_exprimental(const JobContext& job_context, void* user_data) {
+static void task_process_package_batch_experimental(const JobContext& job_context, void* user_data) {
 	PROFILE_FUNCTION();
 
 	using namespace winrt;
@@ -1399,15 +1399,14 @@ struct InstalledAppsQueryState {
 	uint32_t worker_count;
 	IAppxFactory** factories_per_worker;
 	Span<std::string_view> key_names;
-	std::vector<PackageProcessingTaskContext> batches;
+	std::vector<winrt::Windows::ApplicationModel::Package> packages;
+	Span<PackageProcessingTaskContext> package_batches;
 	std::unordered_map<std::string_view, std::string_view> installed_app_name_version_to_app_id;
 };
 
 // Thanks to https://github.com/christophpurrer/cppwinrt-clang/blob/master/build.bat
-InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) {
+InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena, bool experimental) {
 	PROFILE_FUNCTION();
-
-	bool expreimental = true;
 
 	using namespace winrt;
 	using namespace Windows::ApplicationModel;
@@ -1427,7 +1426,7 @@ InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) 
 	// HACK: Allocated in the arena, thus need to manually default construct
 	new (query_state) InstalledAppsQueryState();
 
-	if (expreimental)
+	if (experimental)
 	{
 		if (!platform_load_installed_apps_from_registry(temp_arena, &query_state->key_names)) {
 			return nullptr;
@@ -1495,41 +1494,37 @@ InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena) 
 					query_state->factories_per_worker,
 					query_state->worker_count);
 
-			PackageProcessingTaskContext* current_batch = nullptr;
 			for (auto package : packages_iterator) {
-				if (current_batch == nullptr || current_batch->packages.count == batch_size) {
-					Package* package_buffer = arena_alloc_array<Package>(temp_arena, batch_size);
-					InstalledAppDesc* descs = arena_alloc_array<InstalledAppDesc>(temp_arena, max_app_descs_per_batch);
+				query_state->packages.push_back(package);
+			}
 
-					current_batch = &query_state->batches.emplace_back();
-					current_batch->factories = factories_per_worker;
-					current_batch->packages = Span<Package>(package_buffer, 0);
-					current_batch->app_descs = Span<InstalledAppDesc>(descs, 0);
-					current_batch->max_app_descs = max_app_descs_per_batch;
-					current_batch->installed_app_name_version_to_app_id = &query_state->installed_app_name_version_to_app_id;
-				}
+			Span<Package> packages_span = Span<Package>(query_state->packages.data(), query_state->packages.size());
 
-				// increment the count first, to avoid an out of bounds panic in the `Span<T>`
-				current_batch->packages.count += 1;
+			size_t package_count = query_state->packages.size();
+			size_t batch_count = (package_count + batch_size - 1) / batch_size;
 
-				Package* package_target_location = &current_batch->packages[current_batch->packages.count - 1];
-				// HACK: `Package` class contains a single pointer to the implementation,
-				//       so if we set the whole object to zero, the pointer will be null,
-				//       and won't pass the validity check during it's release
-				//
-				// NOTE: Placement new isn't an option here, becase the `Package` class isn't default constractible.
-				memset(package_target_location, 0, sizeof(*package_target_location));
-				*package_target_location = package;
+			query_state->package_batches = arena_alloc_span<PackageProcessingTaskContext>(temp_arena, batch_count);
+
+			for (size_t batch_index = 0; batch_index < batch_count; batch_index++) {
+				size_t batch_start = batch_index * batch_size;
+				size_t current_batch_size = min(batch_size, package_count - batch_start);
+
+				PackageProcessingTaskContext& current_batch = query_state->package_batches[batch_index];
+				current_batch.factories = factories_per_worker;
+				current_batch.packages = packages_span.slice(batch_start, current_batch_size);
+				current_batch.app_descs = Span<InstalledAppDesc>(arena_alloc_array<InstalledAppDesc>(temp_arena, max_app_descs_per_batch), 0);
+				current_batch.max_app_descs = max_app_descs_per_batch;
+				current_batch.installed_app_name_version_to_app_id = &query_state->installed_app_name_version_to_app_id;
 			}
 		}
 
 		// submit jobs
-		if (expreimental) {
-			for (auto& batch : query_state->batches) {
-				job_system_submit(task_process_package_batch_exprimental, &batch);
+		if (experimental) {
+			for (auto& batch : query_state->package_batches) {
+				job_system_submit(task_process_package_batch_experimental, &batch);
 			}
 		} else {
-			for (auto& batch : query_state->batches) {
+			for (auto& batch : query_state->package_batches) {
 				job_system_submit(task_process_package_batch, &batch);
 			}
 		}
@@ -1550,7 +1545,7 @@ std::vector<InstalledAppDesc> platform_finish_installed_apps_query(InstalledApps
 	// wait for all the jobs to complete
 	job_system_wait_for_all(job_execution_arena);
 
-	for (const auto& batch : query_state->batches) {
+	for (const auto& batch : query_state->package_batches) {
 		for (const auto& installed_app : batch.app_descs) {
 			apps.push_back(installed_app);
 		}

@@ -1131,11 +1131,17 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 			continue;
 		}
 
+		std::wstring_view logo_uri;
 		std::wstring_view display_name;
 
 		{
-			PROFILE_SCOPE("get_display_name");
-			wstr_duplicate(package.DisplayName().c_str(), allocator);
+			PROFILE_SCOPE("get_display_name_and_logo_uri");
+			winrt::hstring logo_uri_string = Uri::UnescapeComponent(package.Logo().Path());
+
+			// HACK: After all of the convertions of the URI, it is left with forward slash at the start.
+			//       So get rid of it.
+			logo_uri = wstr_duplicate(logo_uri_string.c_str() + 1, allocator);
+			display_name = wstr_duplicate(package.DisplayName().c_str(), allocator);
 		}
 
 		ArenaSavePoint temp = arena_begin_temp(allocator);
@@ -1177,12 +1183,6 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 				}
 			}
 
-			if (XMLTag* properties_tag = xml_tag_find_child(xml_document.root, "Properties")) {
-				if (XMLTag* logo_tag = xml_tag_find_child(properties_tag, "Logo")) {
-					logo_path = wstr_duplicate((install_path / logo_tag->value).c_str(), allocator);
-				}
-			}
-
 			if (XMLTag* application_list = xml_tag_find_child(xml_document.root, "Applications")) {
 				for (XMLTag* application_info = application_list->first_child;
 						application_info != nullptr;
@@ -1216,7 +1216,7 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 							InstalledAppDesc& desc = context->app_descs[context->app_descs.count - 1];
 							desc.id = app_user_model_id;
 							desc.display_name = display_name;
-							desc.logo_uri = logo_path;
+							desc.logo_uri = logo_uri;
 						}
 
 						arena_end_temp(lookup_temp);

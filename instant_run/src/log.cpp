@@ -54,6 +54,11 @@ void log_shutdown_thread() {
 
 void log_message(std::wstring_view message, MessageType message_type) {
 	PROFILE_FUNCTION();
+
+	if (message.length() == 0) {
+		return;
+	}
+
 	if (!s_logger.file.is_open() && !s_logger.output_to_stdout) {
 		return;
 	}
@@ -95,6 +100,11 @@ void log_message(std::wstring_view message, MessageType message_type) {
 }
 
 void log_message(std::string_view message, MessageType message_type) {
+	PROFILE_FUNCTION();
+	if (message.length() == 0) {
+		return;
+	}
+
 	if (!s_logger.file.is_open() && !s_logger.output_to_stdout) {
 		return;
 	}

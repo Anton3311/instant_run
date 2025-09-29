@@ -805,7 +805,7 @@ inline static bool text_input_input_char(TextInputState& input_state, wchar_t in
 	return true;
 }
 
-static bool text_input_behaviour(TextInputState& input_state) {
+bool text_input_behaviour(TextInputState& input_state, bool lang_agnostic_input) {
 	PROFILE_FUNCTION();
 
 	bool changed = false;
@@ -894,7 +894,16 @@ static bool text_input_behaviour(TextInputState& input_state) {
 		}
 		case WindowEventKind::CharTyped: {
 			auto& char_event = events[i].data.char_typed;
-			changed |= text_input_input_char(input_state, char_event.c);
+
+			wchar_t typed_char = char_event.c;
+			if (lang_agnostic_input) {
+				// TODO: Do something with the 0 char.
+				//       It might be encoutered when the translation
+				//       to the defualt keyboard layout fails.
+				typed_char = char_event.input_lang_agnostic_char;
+			}
+
+			changed |= text_input_input_char(input_state, typed_char);
 			break;
 		}
 		default:

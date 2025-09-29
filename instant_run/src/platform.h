@@ -92,6 +92,7 @@ struct WindowEvent {
 
 		struct {
 			wchar_t c;
+			wchar_t input_lang_agnostic_char;
 		} char_typed;
 	} data;
 };

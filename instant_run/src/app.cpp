@@ -96,6 +96,7 @@ struct App {
 	Icons icons;
 	ApplicationIconsStorage app_icon_storage;
 	ui::TextInputState search_input_state;
+	ui::TextInputState lang_agnostic_search_input_state;
 	std::vector<Entry> entries;
 	ResultViewState result_view_state;
 	Color highlight_color;
@@ -171,13 +172,17 @@ inline wchar_t to_lower_case(wchar_t c) {
 	return c;
 }
 
-uint32_t compute_search_score(std::wstring_view string,
+struct SearchScore {
+	uint32_t value;
+	uint32_t highlight_range_count;
+};
+
+SearchScore compute_search_score(std::wstring_view string,
 		std::wstring_view pattern,
-		std::vector<RangeU32>& sequence_ranges,
-		RangeU32& highlight_range) {
+		std::vector<RangeU32>& sequence_ranges) {
 	PROFILE_FUNCTION();
 
-	highlight_range.start = static_cast<uint32_t>(sequence_ranges.size());
+	uint32_t highlight_count = 0;
 
 	size_t pattern_index = 0;
 
@@ -197,7 +202,7 @@ uint32_t compute_search_score(std::wstring_view string,
 			matches += 1;
 		} else {
 			if (substring_length != 0) {
-				highlight_range.count += 1;
+				highlight_count += 1;
 				sequence_ranges.push_back(RangeU32 { (uint32_t)substring_start, (uint32_t)substring_length });
 			}
 
@@ -207,15 +212,20 @@ uint32_t compute_search_score(std::wstring_view string,
 	}
 
 	if (substring_length != 0) {
-		highlight_range.count += 1;
+		highlight_count += 1;
 		sequence_ranges.push_back(RangeU32 { (uint32_t)substring_start, (uint32_t)substring_length });
 	}
 
 	max_substring_length = max(max_substring_length, substring_length);
-	return matches + max_substring_length;
+
+	return SearchScore { 
+		.value = (uint32_t)(matches + max_substring_length),
+		.highlight_range_count = highlight_count,
+	};
 }
 
 void update_search_result(std::wstring_view search_pattern,
+		std::wstring_view lang_agnostic_search_pattern,
 		const std::vector<Entry>& entries,
 		std::vector<ResultEntry>& result,
 		std::vector<RangeU32>& sequence_ranges,
@@ -225,18 +235,47 @@ void update_search_result(std::wstring_view search_pattern,
 	result.clear();
 	sequence_ranges.clear();
 
+	std::vector<RangeU32> temp_sequence_ranges;
+
 	for (size_t i = 0; i < entries.size(); i++) {
 		const Entry& entry = entries[i];
 
-		RangeU32 highlight_range{};
-		uint32_t score = compute_search_score(entry.name, search_pattern, sequence_ranges, highlight_range);
+		SearchScore non_lang_agnostic_score = compute_search_score(entry.name, search_pattern, temp_sequence_ranges);
+		SearchScore lang_agnostic_score = compute_search_score(entry.name, lang_agnostic_search_pattern, temp_sequence_ranges);
 
-		// The frequency_score is store in lower half of the int,
+		RangeU32 highlight_range{};
+		uint32_t final_score = 0;
+		if (non_lang_agnostic_score.value >= lang_agnostic_score.value) {
+			highlight_range.start = (uint32_t)sequence_ranges.size();
+			highlight_range.count = non_lang_agnostic_score.highlight_range_count;
+
+			final_score = non_lang_agnostic_score.value;
+
+			for (uint32_t i = 0; i < highlight_range.count; i++) {
+				sequence_ranges.push_back(temp_sequence_ranges[i]);
+			}
+		} else {
+			highlight_range.start = (uint32_t)sequence_ranges.size();
+			highlight_range.count = lang_agnostic_score.highlight_range_count;
+
+			final_score = lang_agnostic_score.value;
+
+			// highlight ranges for the language agnostic match
+			// are appended after a default (non-agnostic) ranges
+			uint32_t start = non_lang_agnostic_score.highlight_range_count;
+			for (uint32_t i = start; i < start + lang_agnostic_score.highlight_range_count; i++) {
+				sequence_ranges.push_back(temp_sequence_ranges[i]);
+			}
+		}
+
+		// The frequency_score is stored in lower half of the int,
 		// so that when the string matching scores of both entries are equal
 		// the `frequency_score` is used to prioritize the most used entry
-		score = ((score & 0xff) << 16) | ((uint32_t)(entry.frequency_score));
+		final_score = ((final_score & 0xff) << 16) | ((uint32_t)(entry.frequency_score));
 
-		result.push_back({ (uint32_t)i, score, highlight_range });
+		result.push_back({ (uint32_t)i, final_score, highlight_range });
+
+		temp_sequence_ranges.clear();
 	}
 
 	std::sort(result.begin(), result.end(), [&](auto a, auto b) -> bool {
@@ -747,7 +786,11 @@ void clear_search_result() {
 	PROFILE_FUNCTION();
 
 	ui::text_input_state_clear(s_app.search_input_state);
-	update_search_result({}, s_app.entries, s_app.result_view_state.matches, s_app.result_view_state.highlights, s_app.arena);
+	update_search_result({}, {},
+			s_app.entries,
+			s_app.result_view_state.matches,
+			s_app.result_view_state.highlights,
+			s_app.arena);
 }
 
 //
@@ -855,8 +898,8 @@ void initialize_app() {
 	s_app.highlight_color = color_from_hex(0xE6A446FF);
 
 	constexpr size_t INPUT_BUFFER_SIZE = 128;
-	ui::TextInputState& input_state = s_app.search_input_state;
-	input_state.buffer = Span(arena_alloc_array<wchar_t>(s_app.arena, INPUT_BUFFER_SIZE), INPUT_BUFFER_SIZE);
+	s_app.search_input_state.buffer = arena_alloc_span<wchar_t>(s_app.arena, INPUT_BUFFER_SIZE);
+	s_app.lang_agnostic_search_input_state.buffer = arena_alloc_span<wchar_t>(s_app.arena, INPUT_BUFFER_SIZE);
 
 	ui::initialize(*s_app.window, s_app.arena);
 	ui::set_theme(theme);
@@ -930,9 +973,14 @@ void run_app_frame() {
 
 		ui::push_next_item_fixed_size(text_field_width);
 
+		ui::text_input_behaviour(s_app.lang_agnostic_search_input_state, true);
+
 		if (ui::text_input(s_app.search_input_state, L"Search ...")) {
-			std::wstring_view search_pattern(s_app.search_input_state.buffer.values, s_app.search_input_state.text_length);
+			std::wstring_view search_pattern = text_input_state_get_text(s_app.search_input_state);
+			std::wstring_view lang_agnostic_search_pattern = text_input_state_get_text(s_app.lang_agnostic_search_input_state);
+
 			update_search_result(search_pattern,
+					lang_agnostic_search_pattern,
 					s_app.entries,
 					s_app.result_view_state.matches,
 					s_app.result_view_state.highlights,

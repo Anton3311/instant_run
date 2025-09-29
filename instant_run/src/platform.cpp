@@ -32,6 +32,28 @@
 
 #define NOMINMAX
 
+void platform_log_error_message() {
+	PROFILE_FUNCTION();
+
+	DWORD error_code = GetLastError();
+
+	wchar_t* message = nullptr;
+	size_t message_length = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER
+			| FORMAT_MESSAGE_FROM_SYSTEM
+			| FORMAT_MESSAGE_IGNORE_INSERTS,
+			NULL,
+			error_code,
+			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+			(LPWSTR)&message,
+			0,
+			NULL);
+
+	log_error(std::wstring_view(message, message_length));
+
+	LocalFree(message);
+}
+
+
 enum class ShortcutResolverState {
 	NotCreated,
 	Created,
@@ -122,27 +144,6 @@ void platform_set_this_thread_affinity_mask(uint64_t mask) {
 	if (!result) {
 		platform_log_error_message();
 	}
-}
-
-void platform_log_error_message() {
-	PROFILE_FUNCTION();
-
-	DWORD error_code = GetLastError();
-
-	wchar_t* message = nullptr;
-	size_t message_length = FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER
-			| FORMAT_MESSAGE_FROM_SYSTEM
-			| FORMAT_MESSAGE_IGNORE_INSERTS,
-			NULL,
-			error_code,
-			MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			(LPWSTR)&message,
-			0,
-			NULL);
-
-	log_error(std::wstring_view(message, message_length));
-
-	LocalFree(message);
 }
 
 void platform_log_lstatus_message(LSTATUS status) {
@@ -333,6 +334,8 @@ struct Window {
 	uint32_t width;
 	uint32_t height;
 
+	HKL default_keyboard_layout;
+
 	HWND handle;
 
 	bool should_close;
@@ -420,6 +423,17 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title, 
 
 	create_opengl_context(window);
 	init_opengl(window);
+
+	// Setup language agnostic input
+	//
+	// `KLF_SUBSTITUTE_OK` makes the OS substitude this layout with
+	// it's variant based on user preference (for example it might repalce QWERTY with DVORAK)
+	//
+	// TODO: don't hard-code english as the default layout
+	window->default_keyboard_layout = LoadKeyboardLayoutA("00000409", KLF_SUBSTITUTE_OK);
+	if (window->default_keyboard_layout == NULL) {
+		platform_log_error_message();
+	}
 
 	return window;
 }
@@ -683,11 +697,38 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 	}
 	case WM_CHAR:
 		if (window->event_count < EVENT_BUFFER_SIZE) {
+			PROFILE_SCOPE("char_input");
 			WindowEvent& event = window->events[window->event_count];
 			window->event_count++;
 
 			event.kind = WindowEventKind::CharTyped;
 			event.data.char_typed.c = (wchar_t)wParam;
+
+			uint8_t keyboard_state[256];
+			if (GetKeyboardState(keyboard_state)) {
+				uint32_t scan_code = (lParam >> 16) & 0xff;
+				uint32_t translated_virtual_key  = MapVirtualKeyExW(scan_code,
+						MAPVK_VSC_TO_VK,
+						window->default_keyboard_layout);
+
+				if (translated_virtual_key == 0) {
+					// translation failed
+					event.data.char_typed.input_lang_agnostic_char = 0;
+				} else {
+					wchar_t result_buffer[1];
+					int32_t result = ToUnicodeEx(translated_virtual_key,
+							scan_code,
+							keyboard_state,
+							result_buffer,
+							sizeof(result_buffer) / sizeof(*result_buffer),
+							1 << 2,
+							window->default_keyboard_layout);
+
+					if (result > 0) {
+						event.data.char_typed.input_lang_agnostic_char = result_buffer[0];
+					}
+				}
+			}
 		}
 
 		return 0;
@@ -1201,6 +1242,7 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 						std::string_view key = str_builder_to_str<char>(key_builder);
 
 						auto it = context->installed_app_name_version_to_app_id->find(key);
+
 						if (it == context->installed_app_name_version_to_app_id->end()) {
 							log_error("failed to resolve app user model id");
 						} else {

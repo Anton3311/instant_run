@@ -112,6 +112,9 @@ inline void text_input_state_clear(TextInputState& state) {
 	state.text_length = 0;
 }
 
+// `lang_agnostic_input` - uses char input translated to the default keyboard layout
+bool text_input_behaviour(TextInputState& input_state, bool lang_agnostic_input = false);
+
 void initialize(const Window& window, Arena& arena);
 
 void begin_frame();

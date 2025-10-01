@@ -134,6 +134,7 @@ struct Window;
 
 struct WindowConfig {
 	bool is_tool_window;
+	bool is_always_on_top;
 };
 
 Window* window_create(uint32_t width,

@@ -942,6 +942,7 @@ void initialize_app(const AppConfig& app_config) {
 
 	WindowConfig window_config{};
 	window_config.is_tool_window = s_app.use_keyboard_hook;
+	window_config.is_always_on_top = s_app.use_keyboard_hook;
 
 	s_app.window = window_create(app_config.window_width, app_config.window_height, L"Instant Run", window_config);
 	s_app.use_exprimental_ms_store_query_method = false;

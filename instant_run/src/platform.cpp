@@ -417,7 +417,13 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title, 
 	MARGINS margins{ 1, 1, 1, 1 };
 	DwmExtendFrameIntoClientArea(window->handle, &margins);
 
-	SetWindowPos(window->handle, NULL, 0, 0, width, height, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCOPYBITS);
+	SetWindowPos(window->handle,
+			config.is_always_on_top ? HWND_TOPMOST : NULL,
+			0,
+			0,
+			width,
+			height,
+			SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOREDRAW | SWP_NOCOPYBITS);
 
 	SetWindowLongPtrW(window->handle, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(window));
 

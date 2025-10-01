@@ -25,7 +25,7 @@
 #endif
 
 #if defined(BUILD_DEBUG) || defined(BUILD_PROFILING)
-#define BUILD_DEV
+	#define BUILD_DEV
 #endif
 
 #define HAS_FLAG(flag_set, flag) (((flag_set) & (flag)) == (flag))
@@ -45,6 +45,37 @@
 		{ return (enum_name)(~(ENUM_TYPE(enum_name))a); }
 
 //
+// Assert
+//
+
+#ifdef BUILD_DEV
+#define ENABLE_ASSERTIONS
+#endif
+
+#define DEBUG_BREAK() __debugbreak()
+
+#ifdef ENABLE_ASSERTIONS
+
+void assert_log_message(const char* message_prefix, const char* message, uint32_t line, const char* file_path);
+
+#define assert(expression) if (!(expression)) { assert_log_message("Assertion failed", \
+		#expression, \
+		__LINE__, \
+		__FILE__); DEBUG_BREAK(); }
+
+#define assert_msg(expression, message) if (!(expression)) { assert_log_message("Assertion failed", \
+		message, \
+		__LINE__, \
+		__FILE__); DEBUG_BREAK(); }
+
+#define unreachable(message) { assert_log_message("Reached unreachable statement", message, __LINE__, __FILE__); DEBUG_BREAK(); }
+#else
+#define assert(expression)
+#define assert_msg(expression, message)
+#define unreachable(message)
+#endif
+
+//
 // Span
 //
 
@@ -55,26 +86,17 @@ struct Span {
 		: values(values), count(count) {}
 
 	inline Span<T> slice(size_t start, size_t slice_length) {
-		if (start + slice_length > count) {
-			__debugbreak();
-		}
-
+		assert(start + slice_length <= count);
 		return Span<T>(values + start, slice_length);
 	}
 
 	inline T& operator[](size_t index) {
-		if (index >= count) {
-			__debugbreak(); // TODO: assert
-		}
-
+		assert(index < count);
 		return values[index];
 	}
 
 	inline const T& operator[](size_t index) const {
-		if (index >= count) {
-			__debugbreak(); // TODO: assert
-		}
-
+		assert(index < count);
 		return values[index];
 	}
 

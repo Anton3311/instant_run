@@ -5,7 +5,6 @@
 
 #include <cstring>
 #include <cctype>
-#include <assert.h>
 
 struct ParserState {
 	Arena* arena;

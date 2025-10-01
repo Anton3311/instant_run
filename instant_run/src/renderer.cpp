@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <vector>
 #include <fstream>
-#include <assert.h>
 
 #define _USE_MATH_DEFINES
 #include <cmath>

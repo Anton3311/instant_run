@@ -1,9 +1,24 @@
 #include "core.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <windows.h>
 #include <fstream>
+
+//
+// Assert
+//
+
+#ifdef ENABLE_ASSERTIONS
+
+void assert_log_message(const char* message_prefix, const char* message, uint32_t line, const char* file_path) {
+	printf("%s: %s in %s:%u\n", message_prefix, message, file_path, line);
+}
+
+#endif
+
+//
+// Arena
+//
 
 typedef struct {
 	size_t page_size;
@@ -46,7 +61,8 @@ void arena_reserve(Arena& arena, size_t initial_size) {
 
 	assert(arena.base != NULL);
 
-	assert(VirtualAlloc(arena.base, (SIZE_T)aligned_allocation, MEM_COMMIT, PAGE_READWRITE) != NULL);
+	void* alloc_result = VirtualAlloc(arena.base, (SIZE_T)aligned_allocation, MEM_COMMIT, PAGE_READWRITE);
+	assert(alloc_result != NULL);
 
 	arena.commited = aligned_allocation;
 }
@@ -55,10 +71,7 @@ void arena_commit_page(Arena& arena, size_t page_count) {
 	PROFILE_FUNCTION();
 
 	size_t commit_size = page_count * s_sys_mem_spec.page_size;
-	if (arena.commited + commit_size >= arena.capacity) {
-		printf("Out of arena memory");
-		assert(false);
-	}
+	assert_msg(arena.commited + commit_size <= arena.capacity, "Out of arena memory");
 
 	void* result = VirtualAlloc(arena.base + arena.commited,
 			(SIZE_T)commit_size,
@@ -92,7 +105,8 @@ void arena_release(Arena& arena) {
 		return;
 	}
 
-	assert(VirtualFree(arena.base, 0, MEM_RELEASE) && "Failed to free arena");
+	BOOL free_result = VirtualFree(arena.base, 0, MEM_RELEASE);
+	assert_msg(free_result, "Failed to release an arena");
 
 	arena.base = NULL;
 	arena.allocated = 0;

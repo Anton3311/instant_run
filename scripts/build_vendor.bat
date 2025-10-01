@@ -18,4 +18,5 @@ if [%1] == [release] (
 clang -Ivendor\GLAD\include -c vendor\GLAD\glad.c -o %BIN_INT_DIR%\glad.o %CMD_ARGS%
 clang -c vendor\stb_truetype\stb_truetype.c -o %BIN_INT_DIR%\stb_truetype.o %CMD_ARGS%
 clang -c vendor\stb_image\stb_image.c -o %BIN_INT_DIR%\stb_image.o %CMD_ARGS%
+clang -c vendor\inih\inih\ini.c -Ivendor\inih\inih\ -o %BIN_INT_DIR%\inih.o %CMD_ARGS%
 

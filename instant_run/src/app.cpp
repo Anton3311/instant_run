@@ -8,6 +8,7 @@
 
 #include "hook_config.h"
 
+#include <inih/ini.h>
 #include <filesystem>
 #include <string>
 #include <fstream>
@@ -840,13 +841,109 @@ Rect create_icon(UVec2 position, const Texture& texture) {
 	return Rect { Vec2 { x, y }, Vec2 { x + icon_width_uv, y + icon_height_uv } };
 }
 
-void initialize_app() {
+static constexpr const char* CONFIG_FILE_PATH = "config.ini";
+static constexpr int32_t MIN_WINDOW_WIDTH = 500;
+static constexpr int32_t MIN_WINDOW_HEIGHT = 300;
+
+enum class MSStoreQueryMethod {
+	Default,
+	Experimental,
+};
+
+struct AppConfig {
+	// ui
+	int32_t font_size;
+	int32_t window_width;
+	int32_t window_height;
+
+	// search
+	MSStoreQueryMethod ms_store_query_method;
+
+	// system
+	int32_t max_worker_count;
+};
+
+struct ConfigLoaderState {
+	AppConfig& out_config;
+	const AppConfig& default_config;
+};
+
+static int ini_config_handler(void* user_data, const char* section_str, const char* name_str, const char* value_str) {
+	ConfigLoaderState& state = *(ConfigLoaderState*)user_data;
+
+	std::string_view section = section_str;
+	std::string_view name = name_str;
+
+	if (section == "ui") {
+		if (name == "font_size") {
+			int32_t font_size = atoi(value_str);
+			if (font_size >= 8) {
+				state.out_config.font_size = font_size;
+			} else {
+				log_error(L"invalid value for property `font_size`");
+				return 0;
+			}
+		} else if (name == "window_width") {
+			int32_t width = atoi(value_str);
+			if (width >= MIN_WINDOW_WIDTH) {
+				state.out_config.window_width = width;
+			} else {
+				log_error(L"invalid value for property `window_width");
+				return 0;
+			}
+		} else if (name == "window_height") {
+			int32_t height = atoi(value_str);
+			if (height >= MIN_WINDOW_HEIGHT) {
+				state.out_config.window_height = height;
+			} else {
+				log_error(L"invalid value for property `window_height");
+				return 0;
+			}
+		} else {
+			log_error(L"unknown property in config section `ui`");
+			return 0;
+		}
+	} else if (section == "search") {
+		if (name == "ms_store_apps_query_method") {
+			std::string value = value_str;
+			if (value == "default") {
+				state.out_config.ms_store_query_method = MSStoreQueryMethod::Default;
+			} else if (value == "experimental") {
+				state.out_config.ms_store_query_method = MSStoreQueryMethod::Experimental;
+			} else {
+				log_error(L"invalid value for property `ms_store_apps_query_method`");
+				return 0;
+			}
+		}
+	} else {
+		log_error(L"unknown config section name");
+		return 0;
+	}
+
+	return 1;
+}
+
+bool load_config(AppConfig& out_config, const AppConfig& default_config) {
+	PROFILE_FUNCTION();
+
+	ConfigLoaderState state = { out_config, default_config };
+
+	if (ini_parse(CONFIG_FILE_PATH, ini_config_handler, &state) < 0) {
+		log_error(L"failed to load config file");
+		log_info(L"using default config");
+		return false;
+	}
+
+	return true;
+}
+
+void initialize_app(const AppConfig& app_config) {
 	PROFILE_FUNCTION();
 
 	WindowConfig window_config{};
 	window_config.is_tool_window = s_app.use_keyboard_hook;
 
-	s_app.window = window_create(800, 500, L"Instant Run", window_config);
+	s_app.window = window_create(app_config.window_width, app_config.window_height, L"Instant Run", window_config);
 	s_app.use_exprimental_ms_store_query_method = false;
 
 	initialize_renderer(s_app.window);
@@ -862,7 +959,7 @@ void initialize_app() {
 	icons.run_as_admin = create_icon(UVec2 { 1, 1 }, icons.texture);
 	icons.copy = create_icon(UVec2 { 2, 1 }, icons.texture);
 
-	s_app.font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", 22.0f, s_app.arena);
+	s_app.font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", (float)app_config.font_size, s_app.arena);
 
 	ui::Theme theme{};
 	theme.default_font = &s_app.font;
@@ -1088,19 +1185,6 @@ void run_app_frame() {
 static constexpr const char* SEARCH_SCORES_FILE_PATH = "search_scores";
 
 int run_app(CommandLineArgs cmd_args) {
-	s_app.use_keyboard_hook = true;
-	if (cmd_args.count > 1) {
-		for (size_t i = 0; i < cmd_args.count; i++) {
-			std::wstring_view arg = cmd_args.arguments[i];
-
-			if (arg == L"--no-hook") {
-				s_app.use_keyboard_hook = false;
-			} else if (arg == L"--experimental-ms-store-query") {
-				s_app.use_exprimental_ms_store_query_method = true;
-			}
-		}
-	}
-
 	query_system_memory_spec();
 
 	s_app.arena = {};
@@ -1118,7 +1202,42 @@ int run_app(CommandLineArgs cmd_args) {
 
 	log_info(L"logger started");
 
+	s_app.use_keyboard_hook = true;
+	if (cmd_args.count > 1) {
+		for (size_t i = 1; i < cmd_args.count; i++) {
+			std::wstring_view arg = cmd_args.arguments[i];
+
+			if (arg == L"--no-hook") {
+				s_app.use_keyboard_hook = false;
+			} else {
+				log_error(L"unknown command line argument");
+				log_error(arg);
+			}
+		}
+	}
+
+	AppConfig app_config{};
+
 	{
+		AppConfig default_app_config{};
+		default_app_config.font_size = 22;
+		default_app_config.window_width = 800;
+		default_app_config.window_height = 500;
+		
+		default_app_config.ms_store_query_method = MSStoreQueryMethod::Default;
+
+		app_config = default_app_config;
+
+		if (!load_config(app_config, default_app_config)) {
+			log_error("failed to load config");
+		}
+
+		s_app.use_exprimental_ms_store_query_method = app_config.ms_store_query_method == MSStoreQueryMethod::Experimental;
+	}
+
+	{
+		// TODO: use the `max_worker_count` settting
+
 		// 1 - for the main thread, 1 - for the hook thread
 		uint32_t thread_count = std::thread::hardware_concurrency() - 2;
 		if (thread_count == 0) {
@@ -1143,7 +1262,7 @@ int run_app(CommandLineArgs cmd_args) {
 		log_info(L"running without the keyboard hook");
 	}
 
-	initialize_app();
+	initialize_app(app_config);
 	window_hide(s_app.window);
 
 	// At this point the search entry must be made available

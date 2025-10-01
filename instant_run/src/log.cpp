@@ -8,11 +8,13 @@
 
 struct LoggerState {
 	std::wofstream file;
+	bool is_initialized;
 	bool output_to_stdout;
 };
 
 struct LoggerThreadState {
 	Arena* arena;
+	bool is_initialized;
 	std::wstring_view name;
 };
 
@@ -23,6 +25,7 @@ bool log_init(const char* log_file_path, bool output_to_stdout) {
 	PROFILE_FUNCTION();
 
 	s_logger.output_to_stdout = output_to_stdout;
+	s_logger.is_initialized = true;
 
 	s_logger.file = std::wofstream(log_file_path);
 	if (!s_logger.file.is_open()) {
@@ -33,8 +36,12 @@ bool log_init(const char* log_file_path, bool output_to_stdout) {
 }
 
 bool log_init_thread(Arena& arena, std::string_view thread_name) {
+	assert(s_logger.is_initialized);
+	assert(!t_logger_thread.is_initialized);
+
 	t_logger_thread.arena = &arena;
 	t_logger_thread.name = string_to_wide(thread_name, *t_logger_thread.arena);
+	t_logger_thread.is_initialized = true;
 	return true;
 }
 
@@ -46,14 +53,21 @@ void log_shutdown() {
 	if (s_logger.file.is_open()) {
 		s_logger.file.close();
 	}
+
+	s_logger.is_initialized = false;
 }
 
 void log_shutdown_thread() {
+	assert(s_logger.is_initialized);
+	assert(t_logger_thread.is_initialized);
+
 	t_logger_thread = {};
 }
 
 void log_message(std::wstring_view message, MessageType message_type) {
 	PROFILE_FUNCTION();
+
+	assert(s_logger.is_initialized && t_logger_thread.is_initialized);
 
 	if (message.length() == 0) {
 		return;
@@ -101,6 +115,9 @@ void log_message(std::wstring_view message, MessageType message_type) {
 
 void log_message(std::string_view message, MessageType message_type) {
 	PROFILE_FUNCTION();
+
+	assert(s_logger.is_initialized && t_logger_thread.is_initialized);
+
 	if (message.length() == 0) {
 		return;
 	}

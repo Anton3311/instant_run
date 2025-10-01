@@ -87,14 +87,18 @@ void log_message(std::wstring_view message, MessageType message_type) {
 	str_builder_append<wchar_t>(builder, t_logger_thread.name);
 	str_builder_append<wchar_t>(builder, L" ");
 
+	const wchar_t* color_code = nullptr;
+
 	switch (message_type) {
 	case MessageType::Info:
 		str_builder_append<wchar_t>(builder, L"[info] ");
 		break;
 	case MessageType::Error:
+		color_code = L"\033[1;31m";
 		str_builder_append<wchar_t>(builder, L"[error] ");
 		break;
 	case MessageType::Warn:
+		color_code = L"\033[1;35m";
 		str_builder_append<wchar_t>(builder, L"[warn] ");
 		break;
 	}
@@ -107,7 +111,11 @@ void log_message(std::wstring_view message, MessageType message_type) {
 	s_logger.file << logged_message;
 
 	if (s_logger.output_to_stdout) {
-		std::wcout << logged_message;
+		if (color_code) {
+			std::wcout << color_code << logged_message << L"\033[0m";
+		} else {
+			std::wcout << logged_message;
+		}
 	}
 
 	arena_end_temp(temp);

@@ -16,6 +16,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
+#include <cwctype>
 
 static constexpr UVec2 INVALID_ICON_POSITION = UVec2 { UINT32_MAX, UINT32_MAX };
 
@@ -152,27 +153,6 @@ Rect get_icon_rect(const ApplicationIconsStorage& storage, UVec2 icon_position) 
 // Searching
 //
 
-// FIXME: Don't hardcode uppercase ranges
-inline wchar_t to_lower_case(wchar_t c) {
-	if (c >= L'A' && c <= 'Z') {
-		return c - L'A' + 'a';
-	}
-	
-	if (c == L'І') {
-		return L'і';
-	}
-
-	if (c == L'Ї') {
-		return L'ї';
-	}
-
-	if (c >= L'А' && c <= L'Я') {
-		return c - L'А' + L'а';
-	}
-
-	return c;
-}
-
 struct SearchScore {
 	uint32_t value;
 	uint32_t highlight_range_count;
@@ -197,7 +177,7 @@ SearchScore compute_search_score(std::wstring_view string,
 			substring_start = i;
 		}
 
-		if (to_lower_case(string[i]) == to_lower_case(pattern[pattern_index])) {
+		if (std::towlower(string[i]) == std::towlower(pattern[pattern_index])) {
 			pattern_index += 1;
 			substring_length += 1;
 			matches += 1;
@@ -611,14 +591,17 @@ void resolve_shortcuts_task(const JobContext& context, void* data) {
 
 void walk_directory(const std::filesystem::path& path,
 		std::vector<Entry>& entries,
-		std::unordered_set<std::wstring>& used_app_names) {
+		std::unordered_set<std::wstring_view>& used_app_names,
+		Arena& allocator) {
 	PROFILE_FUNCTION();
 	for (std::filesystem::path child : std::filesystem::directory_iterator(path)) {
 		if (std::filesystem::is_directory(child)) {
-			walk_directory(child, entries, used_app_names);
+			walk_directory(child, entries, used_app_names, allocator);
 		} else {
 			std::wstring application_name = child.filename().replace_extension("").wstring();
-			if (used_app_names.contains(application_name)) {
+			std::wstring_view lower_application_name = wstr_to_lower(application_name, allocator);
+
+			if (used_app_names.contains(lower_application_name)) {
 				continue;
 			}
 
@@ -626,7 +609,7 @@ void walk_directory(const std::filesystem::path& path,
 			entry.name = std::move(application_name);
 			entry.path = child;
 
-			used_app_names.emplace(entry.name);
+			used_app_names.emplace(lower_application_name);
 		}
 	}
 }
@@ -725,13 +708,19 @@ void schedule_search_entries_query(Arena& arena, SearchEntriesQuery& query_state
 	std::vector<std::filesystem::path> known_folders = get_user_folders(
 			UserFolderKind::Desktop | UserFolderKind::StartMenu | UserFolderKind::Programs);
 
-	std::unordered_set<std::wstring> used_app_names;
-	for (const auto& known_folder : known_folders) {
-		try {
-			walk_directory(known_folder, s_app.entries, used_app_names);
-		} catch (std::exception e) {
-			log_error(e.what());
+	{
+		ArenaSavePoint temp = arena_begin_temp(arena);
+
+		std::unordered_set<std::wstring_view> used_app_names;
+		for (const auto& known_folder : known_folders) {
+			try {
+				walk_directory(known_folder, s_app.entries, used_app_names, arena);
+			} catch (std::exception e) {
+				log_error(e.what());
+			}
 		}
+
+		arena_end_temp(temp);
 	}
 
 	job_system_submit(resolve_shortcuts_task, s_app.entries.data(), s_app.entries.size());

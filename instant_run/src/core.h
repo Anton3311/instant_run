@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string_view>
 #include <filesystem>
+#include <cwctype>
 
 #ifdef ENABLE_PROFILING 
 #include <tracy/Tracy.hpp>
@@ -218,6 +219,17 @@ inline std::wstring_view wstr_duplicate(std::wstring_view string, Arena& allocat
 	size_t length = string.length();
 	wchar_t* new_string = arena_alloc_array<wchar_t>(allocator, length);
 	memcpy(new_string, string.data(), length * sizeof(string[0]));
+
+	return std::wstring_view(new_string, length);
+}
+
+inline std::wstring_view wstr_to_lower(std::wstring_view string, Arena& allocator) {
+	size_t length = string.length();
+	wchar_t* new_string = arena_alloc_array<wchar_t>(allocator, length);
+
+	for (size_t i = 0; i < length; i++) {
+		new_string[i] = std::towlower(string[i]);
+	}
 
 	return std::wstring_view(new_string, length);
 }

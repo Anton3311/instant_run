@@ -32,6 +32,8 @@ struct ApplicationIconsStorage {
 };
 
 struct Icons {
+	float icon_size;
+
 	Texture texture;
 	Rect search;
 	Rect close;
@@ -275,9 +277,9 @@ enum class EntryAction {
 	CopyPath,
 };
 
-float compute_result_entry_height(const ApplicationIconsStorage& app_icon_storage) {
+inline static float compute_result_entry_height() {
 	const ui::Theme& theme = ui::get_theme();
-	return (float)app_icon_storage.icon_size + theme.frame_padding.y * 2.0f;
+	return (float)theme.icon_size + theme.frame_padding.y * 2.0f;
 }
 
 void draw_result_entry_text(const Entry& entry,
@@ -350,7 +352,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	PROFILE_FUNCTION();
 	const ui::Theme& theme = ui::get_theme();
 
-	const float item_height = compute_result_entry_height(app_icon_storage);
+	const float item_height = compute_result_entry_height();
 	ui::LayoutConfig entry_layout_config = theme.default_layout_config;
 	entry_layout_config.padding = theme.frame_padding;
 	entry_layout_config.cross_axis_align = ui::AxisAlignment::Center;
@@ -379,7 +381,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 	{
 		// Icon
 		
-		float icon_size = (float)app_icon_storage.icon_size;
+		float icon_size = theme.icon_size;
 		
 		ui::add_item(Vec2 { icon_size, icon_size });
 
@@ -393,7 +395,7 @@ EntryAction draw_result_entry(const ResultEntry& match,
 
 	if (hovered || is_selected)
 	{
-		float icon_size = font_get_height(*theme.default_font);
+		float icon_size = theme.icon_size;
 
 		uint32_t icon_button_count = 3;
 		
@@ -817,15 +819,12 @@ void launch_app_task(const JobContext& context, void* data) {
 // Application Logic
 //
 
-static constexpr float ICON_SIZE = 32.0f;
+Rect create_icon(UVec2 position, const Texture& texture, float size) {
+	float x = ((float)position.x * size) / (float)texture.width;
+	float y = ((float)position.y * size) / (float)texture.height;
 
-Rect create_icon(UVec2 position, const Texture& texture) {
-
-	float x = ((float)position.x * ICON_SIZE) / (float)texture.width;
-	float y = ((float)position.y * ICON_SIZE) / (float)texture.height;
-
-	float icon_width_uv = ICON_SIZE / (float)texture.width;
-	float icon_height_uv = ICON_SIZE / (float)texture.height;
+	float icon_width_uv = size / (float)texture.width;
+	float icon_height_uv = size / (float)texture.height;
 
 	return Rect { Vec2 { x, y }, Vec2 { x + icon_width_uv, y + icon_height_uv } };
 }
@@ -926,6 +925,10 @@ bool load_config(AppConfig& out_config, const AppConfig& default_config) {
 	return true;
 }
 
+inline static float compute_relative_to_font_size(float size_in_pixels, float reference_font_size) {
+	return std::floor(size_in_pixels / reference_font_size * s_app.font.size);
+}
+
 void initialize_app(const AppConfig& app_config) {
 	PROFILE_FUNCTION();
 
@@ -940,16 +943,20 @@ void initialize_app(const AppConfig& app_config) {
 	initialize_app_icon_storage(s_app.app_icon_storage, 32, 32);
 
 	Icons& icons = s_app.icons;
+	icons.icon_size = 32.0f;
+
 	load_texture("./assets/icons.png", icons.texture);
-	icons.search = create_icon(UVec2 { 0, 0 }, icons.texture);
-	icons.close = create_icon(UVec2 { 1, 0 }, icons.texture);
-	icons.enter = create_icon(UVec2 { 2, 0 }, icons.texture);
-	icons.nav = create_icon(UVec2 { 3, 0 }, icons.texture);
-	icons.run = create_icon(UVec2 { 0, 1 }, icons.texture);
-	icons.run_as_admin = create_icon(UVec2 { 1, 1 }, icons.texture);
-	icons.copy = create_icon(UVec2 { 2, 1 }, icons.texture);
+	icons.search = create_icon(UVec2 { 0, 0 }, icons.texture, icons.icon_size);
+	icons.close = create_icon(UVec2 { 1, 0 }, icons.texture, icons.icon_size);
+	icons.enter = create_icon(UVec2 { 2, 0 }, icons.texture, icons.icon_size);
+	icons.nav = create_icon(UVec2 { 3, 0 }, icons.texture, icons.icon_size);
+	icons.run = create_icon(UVec2 { 0, 1 }, icons.texture, icons.icon_size);
+	icons.run_as_admin = create_icon(UVec2 { 1, 1 }, icons.texture, icons.icon_size);
+	icons.copy = create_icon(UVec2 { 2, 1 }, icons.texture, icons.icon_size);
 
 	s_app.font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", (float)app_config.font_size, s_app.arena);
+
+	constexpr float REFERENCE_FONT_SIZE = 22.0f;
 
 	ui::Theme theme{};
 	theme.default_font = &s_app.font;
@@ -972,12 +979,19 @@ void initialize_app(const AppConfig& app_config) {
 	theme.separator_color = color_from_hex(0x37373AFF);
 	theme.text_color = WHITE;
 	theme.prompt_text_color = color_from_hex(0x9E9E9EFF);
-	theme.default_layout_config.item_spacing = 8.0f;
-	theme.default_layout_config.padding = Vec2 { 12.0f, 12.0f };
-	theme.frame_padding = Vec2 { 12.0f, 8.0f };
-	theme.frame_corner_radius = 4.0f;
+	theme.default_layout_config.item_spacing = compute_relative_to_font_size(8.0f, REFERENCE_FONT_SIZE);
+	theme.default_layout_config.padding = Vec2 {
+		compute_relative_to_font_size(12.0f, REFERENCE_FONT_SIZE),
+		compute_relative_to_font_size(12.0f, REFERENCE_FONT_SIZE),
+	};
+	theme.frame_padding = Vec2 {
+		compute_relative_to_font_size(12.0f, REFERENCE_FONT_SIZE),
+		compute_relative_to_font_size(8.0f, REFERENCE_FONT_SIZE),
+	};
 
-	theme.icon_size = ICON_SIZE;
+	theme.frame_corner_radius = compute_relative_to_font_size(4.0f, REFERENCE_FONT_SIZE);
+
+	theme.icon_size = min(compute_relative_to_font_size(icons.icon_size, REFERENCE_FONT_SIZE), icons.icon_size);
 	theme.icon_color = theme.prompt_text_color;
 	theme.icon_hovered_color = WHITE;
 	theme.icon_pressed_color = theme.prompt_text_color;
@@ -1097,7 +1111,7 @@ void run_app_frame() {
 	ui::begin_vertical_layout(&result_list_layout_config);
 
 	float available_height = ui::get_available_layout_space();
-	float item_height = compute_result_entry_height(s_app.app_icon_storage);
+	float item_height = compute_result_entry_height();
 	float item_spacing = theme.default_layout_config.item_spacing;
 
 	float item_count = (available_height + item_spacing) / (item_height + item_spacing);

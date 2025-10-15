@@ -47,6 +47,8 @@ struct State {
 	Vec2 mouse_position;
 	MouseButtonState mouse_button_states[MOUSE_BUTTON_COUNT];
 
+	bool is_window_hovered;
+
 	bool has_typed_char;
 	wchar_t typed_char;
 
@@ -167,11 +169,11 @@ void add_item(Vec2 size) {
 }
 
 bool is_item_hovered() {
-	return rect_contains_point(s_ui_state.last_item.bounds, s_ui_state.mouse_position);
+	return s_ui_state.is_window_hovered && rect_contains_point(s_ui_state.last_item.bounds, s_ui_state.mouse_position);
 }
 
 bool is_rect_hovered(const Rect& rect) {
-	return rect_contains_point(rect, s_ui_state.mouse_position);
+	return s_ui_state.is_window_hovered && rect_contains_point(rect, s_ui_state.mouse_position);
 }
 
 Rect get_item_bounds() {
@@ -238,12 +240,25 @@ void begin_frame() {
 
 	s_ui_state.has_typed_char = false;
 
+	bool has_mouse_position = false;
+
+	{
+		IVec2 cursor_pos{};
+		if (window_get_cursor_pos(s_ui_state.window, &cursor_pos)) {
+			has_mouse_position = true;
+			s_ui_state.mouse_position = Vec2 { static_cast<float>(cursor_pos.x), static_cast<float>(cursor_pos.y) };
+		}
+	}
+
 	Span<const WindowEvent> events = window_get_events(s_ui_state.window);
 	for (size_t i = 0; i < events.count; i++) {
 		switch (events[i].kind) {
 		case WindowEventKind::MouseMoved: {
 			UVec2 pos = events[i].data.mouse_moved.position;
-			s_ui_state.mouse_position = Vec2 { static_cast<float>(pos.x), static_cast<float>(pos.y) };
+			if (!has_mouse_position) {
+				// Failed to get the cursor position directly from the OS.
+				s_ui_state.mouse_position = Vec2 { static_cast<float>(pos.x), static_cast<float>(pos.y) };
+			}
 			break;
 		}
 		case WindowEventKind::MousePressed: {
@@ -266,6 +281,11 @@ void begin_frame() {
 	UVec2 window_size = window_get_framebuffer_size(s_ui_state.window);
 	float window_width = static_cast<float>(window_size.x);
 	float window_height = static_cast<float>(window_size.y);
+
+	s_ui_state.is_window_hovered = s_ui_state.mouse_position.x >= 0.0f
+		&& s_ui_state.mouse_position.y >= 0.0f
+		&& s_ui_state.mouse_position.x < window_width
+		&& s_ui_state.mouse_position.y < window_height;
 
 	draw_rect(Rect { Vec2 { 0.0f, 0.0f }, Vec2 { window_width, window_height } }, s_ui_state.theme.window_background);
 

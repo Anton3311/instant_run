@@ -24,6 +24,7 @@ enum class WindowEventKind {
 	MouseMoved,
 	MousePressed,
 	MouseReleased,
+	MouseLeave,
 	Key,
 	CharTyped,
 
@@ -125,7 +126,6 @@ using KeyboardHookHandle = KeyboardHook*;
 KeyboardHookHandle keyboard_hook_init(Arena& allocator, const HookConfig& hook_config);
 void keyboard_hook_shutdown(KeyboardHookHandle hook);
 
-
 //
 // Windows
 //
@@ -141,6 +141,8 @@ Window* window_create(uint32_t width,
 		uint32_t height,
 		std::wstring_view title,
 		const WindowConfig& config);
+
+bool window_get_cursor_pos(const Window* window, IVec2* out_position);
 
 void window_show(Window* window);
 void window_hide(Window* window);

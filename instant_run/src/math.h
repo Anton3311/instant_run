@@ -17,6 +17,19 @@ struct UVec2 {
 	uint32_t y;
 };
 
+struct IVec2 {
+	inline bool operator==(IVec2 other) const {
+		return x == other.x && y == other.y;
+	}
+
+	inline bool operator!=(IVec2 other) const {
+		return x != other.x || y != other.y;
+	}
+
+	int32_t x;
+	int32_t y;
+};
+
 struct Vec2 {
 	inline Vec2& operator+=(Vec2 other) {
 		x += other.x;

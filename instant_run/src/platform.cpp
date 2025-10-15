@@ -331,6 +331,7 @@ struct Window {
 	HGLRC opengl_context;
 
 	bool should_close;
+	bool cursor_is_tracked;
 
 	WindowEvent events[EVENT_BUFFER_SIZE];
 	size_t event_count;
@@ -350,6 +351,7 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title, 
 	window->width = width;
 	window->height = height;
 	window->config = config;
+	window->cursor_is_tracked = false;
 
 	WNDCLASSW window_class{};
 	window_class.lpfnWndProc = window_procedure;
@@ -434,6 +436,25 @@ Window* window_create(uint32_t width, uint32_t height, std::wstring_view title, 
 	}
 
 	return window;
+}
+
+bool window_get_cursor_pos(const Window* window, IVec2* out_position) {
+	POINT point{};
+	if (!GetCursorPos(&point)) {
+		log_error("failed to get cursor position");
+		platform_log_error_message();
+		return false;
+	}
+
+	if (!ScreenToClient(window->handle, &point)) {
+		log_error("failed to convert screen cursor position to client space");
+		return false;
+	}
+
+	out_position->x = point.x;
+	out_position->y = point.y;
+
+	return true;
 }
 
 void window_show(Window* window) {
@@ -642,11 +663,36 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 		break;
 	case WM_GETMINMAXINFO:
 	{
-		// NOTE: This prevents the flickering window style changes when the window foucs changes
+		// NOTE: This prevents the flickering window style changes when the window focus changes
 		return 0;
 	}
+	case WM_MOUSELEAVE:
+		if (window->event_count < EVENT_BUFFER_SIZE) {
+			WindowEvent& event = window->events[window->event_count];
+			window->event_count++;
+
+			event.kind = WindowEventKind::MouseLeave;
+		}
+
+		window->cursor_is_tracked = false;
+		break;
 	case WM_MOUSEMOVE:
 	{
+		if (!window->cursor_is_tracked) {
+			TRACKMOUSEEVENT track_event{};
+			ZeroMemory(&track_event, sizeof(track_event));
+			track_event.cbSize = sizeof(track_event);
+			track_event.dwFlags = TME_LEAVE;
+			track_event.hwndTrack = window_handle;
+
+			if (!TrackMouseEvent(&track_event)) {
+				log_error(L"failed to track mouse event");
+				platform_log_error_message();
+			} else {
+				window->cursor_is_tracked = true;
+			}
+		}
+
 		int32_t x = GET_X_LPARAM(lParam);
 		int32_t y = GET_Y_LPARAM(lParam);
 

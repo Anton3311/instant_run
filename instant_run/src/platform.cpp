@@ -1641,6 +1641,28 @@ bool platform_launch_installed_app(const wchar_t* app_id) {
 	return true;
 }
 
+bool platform_has_running_fullscreen_app() {
+	PROFILE_FUNCTION();
+
+	QUERY_USER_NOTIFICATION_STATE notification_state{};
+	HRESULT result = SHQueryUserNotificationState(&notification_state);
+
+	switch (notification_state) {
+	case QUNS_BUSY:
+		// A full-screen application is running or Presentation Settings are applied.
+		// Presentation Settings allow a user to put their machine into a state fit
+		// for an uninterrupted presentation, such as a set of PowerPoint slides, with a single click.
+		return true;
+	case QUNS_RUNNING_D3D_FULL_SCREEN:
+		// A full-screen (exclusive mode) Direct3D application is running.
+		return true;
+	default:
+		return false;
+	}
+
+	return false;
+}
+
 static Bitmap extract_icon_bitmap(HICON icon, Arena& arena) {
 	PROFILE_FUNCTION();
 

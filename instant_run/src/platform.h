@@ -185,7 +185,7 @@ struct InstalledAppsQueryState;
 
 // Schedules the jobs that query the installed applications
 //
-// Uses the `temp_arena` for allocated the query state.
+// Uses the `temp_arena` for allocating the query state.
 // Returns `nullptr` in case of failure.
 //
 // Not safe to clear the `temp_arena` until the `platform_finish_installed_apps_query` has completed.
@@ -196,6 +196,8 @@ std::vector<InstalledAppDesc> platform_finish_installed_apps_query(InstalledApps
 		Arena& job_execution_arena);
 
 bool platform_launch_installed_app(const wchar_t* app_id);
+
+bool platform_has_running_fullscreen_app();
 
 struct Bitmap {
 	uint32_t width;

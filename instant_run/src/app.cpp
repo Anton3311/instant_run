@@ -74,6 +74,24 @@ struct ResultViewState {
 	std::vector<RangeU32> highlights;
 };
 
+enum class MSStoreQueryMethod {
+	Default,
+	Experimental,
+};
+
+struct AppConfig {
+	// ui
+	int32_t font_size;
+	int32_t window_width;
+	int32_t window_height;
+
+	// search
+	MSStoreQueryMethod ms_store_query_method;
+
+	// system
+	int32_t max_worker_count;
+	bool disable_in_fullscreen;
+};
 
 enum class AppState {
 	Running,
@@ -91,8 +109,9 @@ struct App {
 	alignas(64) std::atomic_bool is_active;
 
 	// App state
+	AppConfig config;
 	bool use_keyboard_hook;
-	bool use_exprimental_ms_store_query_method;
+
 	Font font;
 	Arena arena;
 	Window* window;
@@ -521,6 +540,11 @@ void enable_app() {
 
 	log_info(L"recieved activation notification from the keyboard hook");
 
+	if (s_app.config.disable_in_fullscreen && platform_has_running_fullscreen_app()) {
+		log_info(L"ignoring activation notification: a fullscreen application is running");
+		return;
+	}
+
 	s_app.enable_var.notify_all();
 	s_app.is_active.store(true, std::memory_order::acquire);
 }
@@ -728,7 +752,7 @@ void schedule_search_entries_query(Arena& arena, SearchEntriesQuery& query_state
 	job_system_submit(resolve_shortcuts_task, s_app.entries.data(), s_app.entries.size());
 
 	query_state.installed_apps_query = platform_begin_installed_apps_query(arena,
-			s_app.use_exprimental_ms_store_query_method);
+			s_app.config.ms_store_query_method == MSStoreQueryMethod::Experimental);
 }
 
 void collect_search_entries_query_result(Arena& arena, SearchEntriesQuery& query_state) {
@@ -833,24 +857,6 @@ static constexpr const char* CONFIG_FILE_PATH = "config.ini";
 static constexpr int32_t MIN_WINDOW_WIDTH = 500;
 static constexpr int32_t MIN_WINDOW_HEIGHT = 300;
 
-enum class MSStoreQueryMethod {
-	Default,
-	Experimental,
-};
-
-struct AppConfig {
-	// ui
-	int32_t font_size;
-	int32_t window_width;
-	int32_t window_height;
-
-	// search
-	MSStoreQueryMethod ms_store_query_method;
-
-	// system
-	int32_t max_worker_count;
-};
-
 struct ConfigLoaderState {
 	AppConfig& out_config;
 	const AppConfig& default_config;
@@ -903,6 +909,18 @@ static int ini_config_handler(void* user_data, const char* section_str, const ch
 				return 0;
 			}
 		}
+	} else if (section == "system") {
+		if (name == "disable_in_fullscreen") {
+			std::string value = value_str;
+			if (value == "true") {
+				state.out_config.disable_in_fullscreen = true;
+			} else if (value == "false") {
+				state.out_config.disable_in_fullscreen = false;
+			} else {
+				log_error(L"expected a boolean value for property `disable_in_fullscreen`");
+				return 0;
+			}
+		}
 	} else {
 		log_error(L"unknown config section name");
 		return 0;
@@ -929,15 +947,14 @@ inline static float compute_relative_to_font_size(float size_in_pixels, float re
 	return std::floor(size_in_pixels / reference_font_size * s_app.font.size);
 }
 
-void initialize_app(const AppConfig& app_config) {
+void initialize_app() {
 	PROFILE_FUNCTION();
 
 	WindowConfig window_config{};
 	window_config.is_tool_window = s_app.use_keyboard_hook;
 	window_config.is_always_on_top = s_app.use_keyboard_hook;
 
-	s_app.window = window_create(app_config.window_width, app_config.window_height, L"Instant Run", window_config);
-	s_app.use_exprimental_ms_store_query_method = false;
+	s_app.window = window_create(s_app.config.window_width, s_app.config.window_height, L"Instant Run", window_config);
 
 	initialize_renderer(s_app.window);
 	initialize_app_icon_storage(s_app.app_icon_storage, 32, 32);
@@ -954,7 +971,7 @@ void initialize_app(const AppConfig& app_config) {
 	icons.run_as_admin = create_icon(UVec2 { 1, 1 }, icons.texture, icons.icon_size);
 	icons.copy = create_icon(UVec2 { 2, 1 }, icons.texture, icons.icon_size);
 
-	s_app.font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", (float)app_config.font_size, s_app.arena);
+	s_app.font = load_font_from_file("./assets/Roboto/Roboto-Regular.ttf", (float)s_app.config.font_size, s_app.arena);
 
 	constexpr float REFERENCE_FONT_SIZE = 22.0f;
 
@@ -1220,7 +1237,7 @@ int run_app(CommandLineArgs cmd_args) {
 		}
 	}
 
-	AppConfig app_config{};
+	AppConfig& app_config = s_app.config;
 
 	{
 		AppConfig default_app_config{};
@@ -1235,8 +1252,6 @@ int run_app(CommandLineArgs cmd_args) {
 		if (!load_config(app_config, default_app_config)) {
 			log_error("failed to load config");
 		}
-
-		s_app.use_exprimental_ms_store_query_method = app_config.ms_store_query_method == MSStoreQueryMethod::Experimental;
 	}
 
 	{
@@ -1266,7 +1281,7 @@ int run_app(CommandLineArgs cmd_args) {
 		log_info(L"running without the keyboard hook");
 	}
 
-	initialize_app(app_config);
+	initialize_app();
 	window_hide(s_app.window);
 
 	// At this point the search entry must be made available

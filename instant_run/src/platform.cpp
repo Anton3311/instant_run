@@ -307,20 +307,11 @@ constexpr int32_t WGL_CONTEXT_MAJOR_VERSION_ARB = 0x2091;
 constexpr int32_t WGL_CONTEXT_MINOR_VERSION_ARB = 0x2092;
 constexpr int32_t WGL_CONTEXT_PROFILE_MASK_ARB = 0x9126;
 
-using wglCreateContextAttribsARBFunction = HGLRC WINAPI (HDC hdc, HGLRC hShareContext, const int *attribList);
-wglCreateContextAttribsARBFunction* wglCreateContextAttribsARB;
+using wglCreateContextAttribsARBFunction = HGLRC WINAPI(*)(HDC hdc, HGLRC hShareContext, const int *attribList);
 
-using  wglChoosePixelFormatARBFunction = BOOL WINAPI(HDC hdc,
-	const int* piAttribIList,
-	const FLOAT* pfAttribFList,
-	UINT nMaxFormats,
-	int* piFormats,
-	UINT* nNumFormats);
+using wglSwapIntervalEXTFunction = BOOL WINAPI(*)(int interval);
 
-wglChoosePixelFormatARBFunction* wglChoosePixelFormatARB;
-
-using wglSwapIntervalEXTFunction = BOOL WINAPI(int interval);
-wglSwapIntervalEXTFunction* wglSwapIntervalEXT;
+wglSwapIntervalEXTFunction wglSwapIntervalEXT;
 
 //
 // Window
@@ -337,6 +328,7 @@ struct Window {
 	HKL default_keyboard_layout;
 
 	HWND handle;
+	HGLRC opengl_context;
 
 	bool should_close;
 
@@ -529,7 +521,15 @@ void window_close(Window& window) {
 }
 
 void window_destroy(Window* window) {
-	// TODO: Delete all the resources
+	PROFILE_FUNCTION();
+	if (!wglDeleteContext(window->opengl_context)) {
+		platform_log_error_message();
+	}
+
+	if (!DestroyWindow(window->handle)) {
+		platform_log_error_message();
+	}
+
 	delete window;
 }
 
@@ -767,35 +767,45 @@ bool create_opengl_context(Window* window) {
 	PIXELFORMATDESCRIPTOR format_descriptor = { sizeof(format_descriptor), 1 };
 	format_descriptor.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_SUPPORT_COMPOSITION | PFD_DOUBLEBUFFER;
 	format_descriptor.iPixelType = PFD_TYPE_RGBA;
-	format_descriptor.cColorBits = 32;
+	format_descriptor.cColorBits = 24;
 	format_descriptor.cAlphaBits = 8;
 	format_descriptor.iLayerType = PFD_MAIN_PLANE;
+
 	auto format_index = ChoosePixelFormat(hdc, &format_descriptor);
-	if (!format_index)
-		return false;
-
-	if (!SetPixelFormat(hdc, format_index, &format_descriptor))
-		return false;
-
-	auto active_format_index = GetPixelFormat(hdc);
-	if (!active_format_index)
-		return false;
-
-	if (!DescribePixelFormat(hdc, active_format_index, sizeof(format_descriptor), &format_descriptor))
-		return false;
-
-	if ((format_descriptor.dwFlags & PFD_SUPPORT_OPENGL) != PFD_SUPPORT_OPENGL)
-		return false;
-
-	auto context = wglCreateContext(hdc);
-	if (!wglMakeCurrent(hdc, context))
-	{
+	if (!format_index) {
 		return false;
 	}
 
-	wglCreateContextAttribsARB = (wglCreateContextAttribsARBFunction*)wglGetProcAddress("wglCreateContextAttribsARB");
-	wglChoosePixelFormatARB = (wglChoosePixelFormatARBFunction*)wglGetProcAddress("wglChoosePixelFormatARB");
-	wglSwapIntervalEXT = (wglSwapIntervalEXTFunction*)wglGetProcAddress("wglSwapIntervalEXT");
+	if (!SetPixelFormat(hdc, format_index, &format_descriptor)) {
+		return false;
+	}
+
+	auto active_format_index = GetPixelFormat(hdc);
+	if (!active_format_index) {
+		return false;
+	}
+
+	if (!DescribePixelFormat(hdc, active_format_index, sizeof(format_descriptor), &format_descriptor)) {
+		return false;
+	}
+
+	if ((format_descriptor.dwFlags & PFD_SUPPORT_OPENGL) != PFD_SUPPORT_OPENGL) {
+		return false;
+	}
+
+	HDC previous_dc = wglGetCurrentDC();
+	HGLRC previous_gl_context = wglGetCurrentContext();
+
+	HGLRC gl_context = wglCreateContext(hdc);
+	if (!wglMakeCurrent(hdc, gl_context)) {
+		log_error("failed to make context current");
+
+		wglMakeCurrent(previous_dc, previous_gl_context);
+		wglDeleteContext(gl_context);
+		return false;
+	}
+
+	auto wglCreateContextAttribsARB = (wglCreateContextAttribsARBFunction)wglGetProcAddress("wglCreateContextAttribsARB");
 
 	int32_t attributes[] =
 	{
@@ -804,9 +814,21 @@ bool create_opengl_context(Window* window) {
 		0,
 	};
 
-	auto openGL45Context = wglCreateContextAttribsARB(hdc, context, attributes);
+	window->opengl_context = wglCreateContextAttribsARB(hdc, nullptr, attributes);
+
+	wglSwapIntervalEXT = (wglSwapIntervalEXTFunction)wglGetProcAddress("wglSwapIntervalEXT");
 
 	wglSwapIntervalEXT(1);
+
+	wglDeleteContext(gl_context);
+
+	if (!wglMakeCurrent(hdc, window->opengl_context)) {
+		log_error("failed to make context current");
+		wglDeleteContext(gl_context);
+
+		wglMakeCurrent(previous_dc, previous_gl_context);
+		return false;
+	}
 
 	return true;
 }

@@ -27,6 +27,7 @@ enum class WindowEventKind {
 	MouseLeave,
 	Key,
 	CharTyped,
+	MouseScroll,
 
 	// This event has no data
 	FocusLost,
@@ -95,6 +96,10 @@ struct WindowEvent {
 			wchar_t c;
 			wchar_t input_lang_agnostic_char;
 		} char_typed;
+
+		struct {
+			int32_t delta;
+		} mouse_scroll;
 	} data;
 };
 

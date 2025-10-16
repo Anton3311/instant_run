@@ -645,8 +645,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 	PROFILE_FUNCTION();
 	Window* window = reinterpret_cast<Window*>(GetWindowLongPtrW(window_handle, GWLP_USERDATA));
 
-	switch (message)
-	{
+	switch (message) {
 	case WM_NCHITTEST:
 		return HTCLIENT;
 	case WM_NCPAINT:
@@ -661,8 +660,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 			window_focus(window);
 		}
 		break;
-	case WM_GETMINMAXINFO:
-	{
+	case WM_GETMINMAXINFO: {
 		// NOTE: This prevents the flickering window style changes when the window focus changes
 		return 0;
 	}
@@ -675,9 +673,19 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 		}
 
 		window->cursor_is_tracked = false;
-		break;
-	case WM_MOUSEMOVE:
-	{
+		return 0;
+	case WM_MOUSEWHEEL: {
+		if (window->event_count < EVENT_BUFFER_SIZE) {
+			WindowEvent& event = window->events[window->event_count];
+			window->event_count++;
+
+			event.kind = WindowEventKind::MouseScroll;
+			event.data.mouse_scroll.delta = GET_WHEEL_DELTA_WPARAM(wParam);
+		}
+
+		return 0;
+	}
+	case WM_MOUSEMOVE: {
 		if (!window->cursor_is_tracked) {
 			TRACKMOUSEEVENT track_event{};
 			ZeroMemory(&track_event, sizeof(track_event));
@@ -706,8 +714,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 
 		return 0;
 	}
-	case WM_LBUTTONDOWN:
-	{
+	case WM_LBUTTONDOWN: {
 		if (window->event_count < EVENT_BUFFER_SIZE) {
 			WindowEvent& event = window->events[window->event_count];
 			window->event_count++;
@@ -718,8 +725,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 
 		return 0;
 	}
-	case WM_LBUTTONUP:
-	{
+	case WM_LBUTTONUP: {
 		if (window->event_count < EVENT_BUFFER_SIZE) {
 			WindowEvent& event = window->events[window->event_count];
 			window->event_count++;
@@ -730,8 +736,7 @@ LRESULT window_procedure(HWND window_handle, UINT message, WPARAM wParam, LPARAM
 
 		return 0;
 	}
-	case WM_KEYDOWN:
-	{
+	case WM_KEYDOWN: {
 		KeyCode key_code{};
 		if (translate_key_code(wParam, key_code)) {
 			if (window->event_count < EVENT_BUFFER_SIZE) {

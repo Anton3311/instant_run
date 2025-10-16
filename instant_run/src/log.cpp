@@ -21,7 +21,7 @@ struct LoggerThreadState {
 static LoggerState s_logger;
 thread_local LoggerThreadState t_logger_thread;
 
-bool log_init(const char* log_file_path, bool output_to_stdout) {
+bool log_init(const std::filesystem::path& log_file_path, bool output_to_stdout) {
 	PROFILE_FUNCTION();
 
 	s_logger.output_to_stdout = output_to_stdout;

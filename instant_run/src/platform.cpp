@@ -978,13 +978,13 @@ static std::filesystem::path get_known_system_path(KNOWNFOLDERID id) {
 
 	HANDLE token = nullptr;
 	if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY | TOKEN_IMPERSONATE, &token)) {
-		printf("Failed to open process token");
+		log_error(L"failed to open process token");
 	}
 
 	if (SHGetKnownFolderPath(id, 0, token, &path) == S_OK) {
 		result = path;
 	} else {
-		printf("SHGetKnownFolderPath: failed");
+		log_error(L"SHGetKnownFolderPath failed");
 	}
 
 	CloseHandle(token);
@@ -993,20 +993,40 @@ static std::filesystem::path get_known_system_path(KNOWNFOLDERID id) {
 	return result;
 }
 
-std::vector<std::filesystem::path> get_user_folders(UserFolderKind kind) {
+std::filesystem::path fs_get_single_known_folder_path(KnownFolderKind folder_kind) {
+	switch (folder_kind) {
+	case KnownFolderKind::Desktop:
+		return get_known_system_path(FOLDERID_Desktop);
+	case KnownFolderKind::StartMenu:
+		return get_known_system_path(FOLDERID_CommonStartMenu);
+	case KnownFolderKind::Programs:
+		return get_known_system_path(FOLDERID_Programs);
+	case KnownFolderKind::ApplicationData:
+		return get_known_system_path(FOLDERID_RoamingAppData);
+	}
+
+	return {};
+}
+
+std::vector<std::filesystem::path> fs_get_known_folder_paths(KnownFolderKind folders) {
 	PROFILE_FUNCTION();
 	std::vector<std::filesystem::path> results;
 
-	if (HAS_FLAG(kind, UserFolderKind::StartMenu)) {
-		results.push_back(get_known_system_path(FOLDERID_CommonStartMenu));
-	}
+	KnownFolderKind all_folder_kinds[] = {
+		KnownFolderKind::Desktop,
+		KnownFolderKind::StartMenu,
+		KnownFolderKind::Programs,
+		KnownFolderKind::ApplicationData,
+	};
 
-	if (HAS_FLAG(kind, UserFolderKind::Programs)) {
-		results.push_back(get_known_system_path(FOLDERID_Programs));
-	}
+	for (KnownFolderKind folder_kind : all_folder_kinds) {
+		if (HAS_FLAG(folders, folder_kind)) {
+			std::filesystem::path path = fs_get_single_known_folder_path(folder_kind);
 
-	if (HAS_FLAG(kind, UserFolderKind::Desktop)) {
-		results.push_back(get_known_system_path(FOLDERID_Desktop));
+			if (std::filesystem::exists(path)) {
+				results.push_back(path);
+			}
+		}
 	}
 
 	return results;

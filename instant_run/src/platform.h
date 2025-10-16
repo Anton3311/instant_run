@@ -167,15 +167,17 @@ std::wstring_view window_read_clipboard_text(const Window& window, Arena& alloca
 // File system
 //
 
-enum class UserFolderKind {
+enum class KnownFolderKind {
 	Desktop = 1,
 	StartMenu = 2,
 	Programs = 4,
+	ApplicationData = 8,
 };
 
-IMPL_ENUM_FLAGS(UserFolderKind);
+IMPL_ENUM_FLAGS(KnownFolderKind);
 
-std::vector<std::filesystem::path> get_user_folders(UserFolderKind folders);
+std::filesystem::path fs_get_single_known_folder_path(KnownFolderKind folder_kind);
+std::vector<std::filesystem::path> fs_get_known_folder_paths(KnownFolderKind folders);
 
 struct InstalledAppDesc {
 	const wchar_t* id;

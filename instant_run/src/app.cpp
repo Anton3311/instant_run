@@ -18,7 +18,14 @@
 #include <unordered_set>
 #include <cwctype>
 
+static constexpr const char* SEARCH_SCORES_FILE_PATH = "search_scores";
+static constexpr const char* CONFIG_FILE_PATH = "config.ini";
+static constexpr int32_t MIN_WINDOW_WIDTH = 500;
+static constexpr int32_t MIN_WINDOW_HEIGHT = 300;
 static constexpr UVec2 INVALID_ICON_POSITION = UVec2 { UINT32_MAX, UINT32_MAX };
+
+constexpr std::wstring_view ARG_NO_HOOK = L"--no-hook";
+constexpr std::wstring_view DEV_DATA_PATH = L"dev_data";
 
 struct ApplicationIconsStorage {
 	using IconId = void*;
@@ -99,6 +106,8 @@ enum class AppState {
 };
 
 struct App {
+	alignas(64) std::atomic_bool is_active;
+
 	AppState state;
 	std::mutex enable_mutex;
 	std::condition_variable enable_var;
@@ -106,11 +115,10 @@ struct App {
 	// Keyboard hook
 	KeyboardHookHandle keyboard_hook;
 
-	alignas(64) std::atomic_bool is_active;
-
 	// App state
 	AppConfig config;
 	bool use_keyboard_hook;
+	std::filesystem::path app_data_dir_path;
 
 	Font font;
 	Arena arena;
@@ -640,9 +648,9 @@ void walk_directory(const std::filesystem::path& path,
 	}
 }
 
-void serialize_frequency_scores(Span<const Entry> entries, const char* output_file) {
+void serialize_frequency_scores(Span<const Entry> entries) {
 	PROFILE_FUNCTION();
-	std::wofstream file("search_scores");
+	std::wofstream file(s_app.app_data_dir_path / SEARCH_SCORES_FILE_PATH);
 	for (const auto& entry : entries) {
 		if (entry.frequency_score > 0) {
 			file << entry.frequency_score << " \"" << entry.name << "\"\n";
@@ -650,10 +658,10 @@ void serialize_frequency_scores(Span<const Entry> entries, const char* output_fi
 	}
 }
 
-bool deserialize_frequency_scores(Span<Entry> entries, const char* input_file, Arena& arena) {
+bool deserialize_frequency_scores(Span<Entry> entries, Arena& arena) {
 	PROFILE_FUNCTION();
 
-	std::wifstream stream(input_file);
+	std::wifstream stream(s_app.app_data_dir_path / SEARCH_SCORES_FILE_PATH);
 	if (!stream.is_open()) {
 		return false;
 	}
@@ -731,8 +739,8 @@ struct SearchEntriesQuery {
 void schedule_search_entries_query(Arena& arena, SearchEntriesQuery& query_state) {
 	PROFILE_FUNCTION();
 
-	std::vector<std::filesystem::path> known_folders = get_user_folders(
-			UserFolderKind::Desktop | UserFolderKind::StartMenu | UserFolderKind::Programs);
+	std::vector<std::filesystem::path> known_folders = fs_get_known_folder_paths(
+			KnownFolderKind::Desktop | KnownFolderKind::StartMenu | KnownFolderKind::Programs);
 
 	{
 		ArenaSavePoint temp = arena_begin_temp(arena);
@@ -853,10 +861,6 @@ Rect create_icon(UVec2 position, const Texture& texture, float size) {
 	return Rect { Vec2 { x, y }, Vec2 { x + icon_width_uv, y + icon_height_uv } };
 }
 
-static constexpr const char* CONFIG_FILE_PATH = "config.ini";
-static constexpr int32_t MIN_WINDOW_WIDTH = 500;
-static constexpr int32_t MIN_WINDOW_HEIGHT = 300;
-
 struct ConfigLoaderState {
 	AppConfig& out_config;
 	const AppConfig& default_config;
@@ -932,15 +936,48 @@ static int ini_config_handler(void* user_data, const char* section_str, const ch
 bool load_config(AppConfig& out_config, const AppConfig& default_config) {
 	PROFILE_FUNCTION();
 
-	ConfigLoaderState state = { out_config, default_config };
+	std::filesystem::path config_path = s_app.app_data_dir_path / CONFIG_FILE_PATH;
+	if (!std::filesystem::exists(config_path)) {
+		return false;
+	}
 
-	if (ini_parse(CONFIG_FILE_PATH, ini_config_handler, &state) < 0) {
-		log_error(L"failed to load config file");
-		log_info(L"using default config");
+	ConfigLoaderState state = { out_config, default_config };
+	if (ini_parse(config_path.generic_string().c_str(), ini_config_handler, &state) < 0) {
 		return false;
 	}
 
 	return true;
+}
+
+bool setup_app_data_dir_path() {
+	PROFILE_FUNCTION();
+
+	std::filesystem::path base_dir;
+
+#ifdef BUILD_DEV
+	try {
+		std::filesystem::create_directory(DEV_DATA_PATH);
+		base_dir = DEV_DATA_PATH;
+	} catch (std::exception& e) {
+		return true;
+	}
+#else
+	std::filesystem::path app_data_path = fs_get_single_known_folder_path(KnownFolderKind::ApplicationData);
+	if (std::filesystem::exists(app_data_path)) {
+		base_dir = app_data_path;
+	} else {
+		return false;
+	}
+#endif
+
+	s_app.app_data_dir_path = base_dir / "instant_run";
+
+	try {
+		std::filesystem::create_directory(s_app.app_data_dir_path);
+		return true;
+	} catch (std::exception& e) {
+		return false;
+	}
 }
 
 inline static float compute_relative_to_font_size(float size_in_pixels, float reference_font_size) {
@@ -1203,13 +1240,16 @@ void run_app_frame() {
 	s_app.wait_for_window_events = true;
 }
 
-static constexpr const char* SEARCH_SCORES_FILE_PATH = "search_scores";
-
 int run_app(CommandLineArgs cmd_args) {
 	query_system_memory_spec();
 
 	s_app.arena = {};
 	s_app.arena.capacity = mb_to_bytes(8);
+
+	if (!setup_app_data_dir_path()) {
+		arena_release(s_app.arena);
+		return EXIT_FAILURE;
+	}
 
 	bool log_to_stdout;
 #ifdef BUILD_DEV
@@ -1218,17 +1258,19 @@ int run_app(CommandLineArgs cmd_args) {
 	log_to_stdout = false;
 #endif
 
-	log_init("log.txt", log_to_stdout);
+	log_init(s_app.app_data_dir_path / "log.txt", log_to_stdout);
 	log_init_thread(s_app.arena, "main");
 
 	log_info(L"logger started");
+	log_info(L"app data dir: " + s_app.app_data_dir_path.wstring());
 
 	s_app.use_keyboard_hook = true;
+
 	if (cmd_args.count > 1) {
 		for (size_t i = 1; i < cmd_args.count; i++) {
 			std::wstring_view arg = cmd_args.arguments[i];
 
-			if (arg == L"--no-hook") {
+			if (arg == ARG_NO_HOOK) {
 				s_app.use_keyboard_hook = false;
 			} else {
 				log_error(L"unknown command line argument");
@@ -1250,7 +1292,8 @@ int run_app(CommandLineArgs cmd_args) {
 		app_config = default_app_config;
 
 		if (!load_config(app_config, default_app_config)) {
-			log_error("failed to load config");
+			log_error(L"failed to load config file");
+			log_info(L"using default config");
 		}
 	}
 
@@ -1287,7 +1330,7 @@ int run_app(CommandLineArgs cmd_args) {
 	// At this point the search entry must be made available
 	collect_search_entries_query_result(s_app.arena, search_entries_query);
 
-	deserialize_frequency_scores(Span(s_app.entries.data(), s_app.entries.size()), SEARCH_SCORES_FILE_PATH, s_app.arena);
+	deserialize_frequency_scores(Span(s_app.entries.data(), s_app.entries.size()), s_app.arena);
 
 	clear_search_result();
 
@@ -1323,7 +1366,7 @@ int run_app(CommandLineArgs cmd_args) {
 		}
 	}
 
-	serialize_frequency_scores(Span<const Entry>(s_app.entries.data(), s_app.entries.size()), SEARCH_SCORES_FILE_PATH);
+	serialize_frequency_scores(Span<const Entry>(s_app.entries.data(), s_app.entries.size()));
 
 	log_info(L"terminated");
 

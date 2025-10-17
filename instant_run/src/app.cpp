@@ -810,6 +810,7 @@ void clear_search_result() {
 	PROFILE_FUNCTION();
 
 	ui::text_input_state_clear(s_app.search_input_state);
+	ui::text_input_state_clear(s_app.lang_agnostic_search_input_state);
 	update_search_result({}, {},
 			s_app.entries,
 			s_app.result_view_state.matches,
@@ -1105,6 +1106,13 @@ void run_app_frame() {
 					break;
 				}
 			}
+			break;
+		}
+		case WindowEventKind::MouseScroll: {
+			int32_t scroll_rows = -events[i].data.mouse_scroll.delta / 120;
+			size_t result_count = s_app.result_view_state.matches.size();
+			size_t selected_index = s_app.result_view_state.selected_index;
+			s_app.result_view_state.selected_index = (selected_index + result_count + scroll_rows) % result_count;
 			break;
 		}
 		default:

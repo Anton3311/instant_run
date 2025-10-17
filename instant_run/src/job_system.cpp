@@ -50,6 +50,8 @@ static bool try_pop_task(Task* out_task) {
 static bool try_execute_single_task(JobContext& context) {
 	PROFILE_FUNCTION();
 
+	ArenaSavePoint temp = arena_begin_temp(context.temp_arena);
+
 	Task task{};
 	bool has_task = try_pop_task(&task);
 
@@ -66,12 +68,14 @@ static bool try_execute_single_task(JobContext& context) {
 
 	s_job_sys_state.active_worker_count.fetch_sub(1, std::memory_order::acquire);
 
+	arena_end_temp(temp);
+
 	return true;
 }
 
 static void thread_worker(uint32_t index) {
-	Arena logger_arena{};
-	logger_arena.capacity = kb_to_bytes(4);
+	Arena temp_arena{};
+	temp_arena.capacity = mb_to_bytes(8);
 
 	Arena generic_arena{};
 	generic_arena.capacity = mb_to_bytes(8);
@@ -79,7 +83,7 @@ static void thread_worker(uint32_t index) {
 	{
 		std::string thread_name = std::string("worker") + std::to_string(index);
 
-		log_init_thread(logger_arena, thread_name);
+		log_init_thread(temp_arena, thread_name);
 		PROFILE_NAME_THREAD(thread_name.c_str());
 	}
 
@@ -95,7 +99,7 @@ static void thread_worker(uint32_t index) {
 			break;
 		}
 
-		JobContext context = { .arena = generic_arena, .worker_index = index };
+		JobContext context = { .arena = generic_arena, .temp_arena = temp_arena, .worker_index = index };
 		bool has_task = try_execute_single_task(context);
 
 		if (!has_task) {
@@ -112,7 +116,8 @@ static void thread_worker(uint32_t index) {
 
 	log_shutdown_thread();
 
-	arena_release(logger_arena);
+	arena_release(temp_arena);
+	arena_release(generic_arena);
 }
 
 void job_system_init(uint32_t worker_count) {
@@ -143,10 +148,10 @@ void job_system_submit(JobSystemTask task, void* user_data, size_t batch_size) {
 	s_job_sys_state.wake_var.notify_one();
 }
 
-void job_system_wait_for_all(Arena& task_execution_allocator) {
+void job_system_wait_for_all(Arena& arena, Arena& temp_arena) {
 	PROFILE_FUNCTION();
 
-	JobContext context = { .arena = task_execution_allocator, .worker_index = job_system_get_worker_count() };
+	JobContext context = { .arena = arena, .temp_arena = temp_arena, .worker_index = job_system_get_worker_count() };
 	while (true) {
 		if (!try_execute_single_task(context)) {
 			break;

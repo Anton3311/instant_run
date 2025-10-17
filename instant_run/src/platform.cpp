@@ -1261,8 +1261,6 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 	PackageProcessingTaskContext* context = reinterpret_cast<PackageProcessingTaskContext*>(user_data);
 	IAppxFactory* factory = context->factories[job_context.worker_index];
 
-	Arena& allocator = job_context.arena;
-
 	for (const auto& package : context->packages) {
 		std::filesystem::path install_path = package.InstalledPath().c_str();
 		std::filesystem::path manifest_path = install_path / "AppxManifest.xml";
@@ -1280,13 +1278,13 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 
 			// HACK: After all of the convertions of the URI, it is left with forward slash at the start.
 			//       So get rid of it.
-			logo_uri = wstr_duplicate(logo_uri_string.c_str() + 1, allocator);
-			display_name = wstr_duplicate(package.DisplayName().c_str(), allocator);
+			logo_uri = wstr_duplicate(logo_uri_string.c_str() + 1, job_context.arena);
+			display_name = wstr_duplicate(package.DisplayName().c_str(), job_context.arena);
 		}
 
-		ArenaSavePoint temp = arena_begin_temp(allocator);
+		ArenaSavePoint temp = arena_begin_temp(job_context.temp_arena);
 		std::string_view appx_manifest_content;
-		if (!read_text_file(manifest_path, allocator, &appx_manifest_content)) {
+		if (!read_text_file(manifest_path, job_context.temp_arena, &appx_manifest_content)) {
 			arena_end_temp(temp);
 
 			log_error("failed to read AppxManifest.xml");
@@ -1302,66 +1300,64 @@ static void task_process_package_batch_experimental(const JobContext& job_contex
 			}
 		}
 
-		XMLDocument xml_document = xml_parse(appx_manifest_content, allocator);
+		XMLDocument xml_document = xml_parse(appx_manifest_content, job_context.temp_arena);
 
 		if (!xml_document.root) {
-			log_error("failed to parse AppxManifest.xml");
+			log_error(L"failed to parse AppxManifest.xml");
+			continue;
+		}
 
-			XMLDocument xml_document2 = xml_parse(appx_manifest_content, allocator);
-		} else {
-			std::string_view package_name;
-			std::string_view package_version;
-			std::wstring_view logo_path;
+		std::string_view package_name;
+		std::string_view package_version;
+		std::wstring_view logo_path;
 
-			if (XMLTag* identity_tag = xml_tag_find_child(xml_document.root, "Identity")) {
-				for (XMLAttribute attrib : identity_tag->attributes) {
-					if (attrib.name == "Name") {
-						package_name = attrib.value;
-					} else if (attrib.name == "Version") {
-						package_version = attrib.value;
-					}
+		if (XMLTag* identity_tag = xml_tag_find_child(xml_document.root, "Identity")) {
+			for (XMLAttribute attrib : identity_tag->attributes) {
+				if (attrib.name == "Name") {
+					package_name = attrib.value;
+				} else if (attrib.name == "Version") {
+					package_version = attrib.value;
 				}
 			}
+		}
 
-			if (XMLTag* application_list = xml_tag_find_child(xml_document.root, "Applications")) {
-				for (XMLTag* application_info = application_list->first_child;
-						application_info != nullptr;
-						application_info = application_info->next_sibling) {
+		if (XMLTag* application_list = xml_tag_find_child(xml_document.root, "Applications")) {
+			for (XMLTag* application_info = application_list->first_child;
+					application_info != nullptr;
+					application_info = application_info->next_sibling) {
 
-					if (XMLAttribute* id_attrib = xml_tag_find_attrib(application_info, "Id")) {
-						std::string_view app_id = id_attrib->value;
+				if (XMLAttribute* id_attrib = xml_tag_find_attrib(application_info, "Id")) {
+					std::string_view app_id = id_attrib->value;
 
-						ArenaSavePoint lookup_temp = arena_begin_temp(allocator);
-						StringBuilder<char> key_builder = { &allocator };
+					ArenaSavePoint lookup_temp = arena_begin_temp(job_context.temp_arena);
+					StringBuilder<char> key_builder = { &job_context.temp_arena };
 
-						str_builder_append<char>(key_builder, package_name);
-						str_builder_append<char>(key_builder, '_');
-						str_builder_append<char>(key_builder, package_version);
+					str_builder_append<char>(key_builder, package_name);
+					str_builder_append<char>(key_builder, '_');
+					str_builder_append<char>(key_builder, package_version);
 
-						std::string_view key = str_builder_to_str<char>(key_builder);
+					std::string_view key = str_builder_to_str<char>(key_builder);
 
-						auto it = context->installed_app_name_version_to_app_id->find(key);
+					auto it = context->installed_app_name_version_to_app_id->find(key);
 
-						if (it == context->installed_app_name_version_to_app_id->end()) {
-							log_error("failed to resolve app user model id");
-						} else {
-							std::string_view partial_app_id = it->second;
+					if (it == context->installed_app_name_version_to_app_id->end()) {
+						log_error("failed to resolve app user model id");
+					} else {
+						std::string_view partial_app_id = it->second;
 
-							const wchar_t* app_user_model_id = build_full_app_user_model_id(package_name,
-									partial_app_id,
-									app_id,
-									allocator);
+						const wchar_t* app_user_model_id = build_full_app_user_model_id(package_name,
+								partial_app_id,
+								app_id,
+								job_context.arena);
 
-
-							context->app_descs.count += 1;
-							InstalledAppDesc& desc = context->app_descs[context->app_descs.count - 1];
-							desc.id = app_user_model_id;
-							desc.display_name = display_name;
-							desc.logo_uri = logo_uri;
-						}
-
-						arena_end_temp(lookup_temp);
+						context->app_descs.count += 1;
+						InstalledAppDesc& desc = context->app_descs[context->app_descs.count - 1];
+						desc.id = app_user_model_id;
+						desc.display_name = display_name;
+						desc.logo_uri = logo_uri;
 					}
+
+					arena_end_temp(lookup_temp);
 				}
 			}
 		}
@@ -1650,13 +1646,14 @@ InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena, 
 }
 
 std::vector<InstalledAppDesc> platform_finish_installed_apps_query(InstalledAppsQueryState* query_state,
-		Arena& job_execution_arena) {
+		Arena& job_execution_arena,
+		Arena& job_execution_temp_arena) {
 	PROFILE_FUNCTION();
 
 	std::vector<InstalledAppDesc> apps;
 
 	// wait for all the jobs to complete
-	job_system_wait_for_all(job_execution_arena);
+	job_system_wait_for_all(job_execution_arena, job_execution_temp_arena);
 
 	for (const auto& batch : query_state->package_batches) {
 		for (const auto& installed_app : batch.app_descs) {

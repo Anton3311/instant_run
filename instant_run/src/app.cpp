@@ -122,6 +122,7 @@ struct App {
 
 	Font font;
 	Arena arena;
+	Arena temp_arena;
 	Window* window;
 	bool wait_for_window_events;
 	Icons icons;
@@ -626,14 +627,14 @@ void resolve_shortcuts_task(const JobContext& context, void* data) {
 void walk_directory(const std::filesystem::path& path,
 		std::vector<Entry>& entries,
 		std::unordered_set<std::wstring_view>& used_app_names,
-		Arena& allocator) {
+		Arena& app_name_allocator) {
 	PROFILE_FUNCTION();
 	for (std::filesystem::path child : std::filesystem::directory_iterator(path)) {
 		if (std::filesystem::is_directory(child)) {
-			walk_directory(child, entries, used_app_names, allocator);
+			walk_directory(child, entries, used_app_names, app_name_allocator);
 		} else {
 			std::wstring application_name = child.filename().replace_extension("").wstring();
-			std::wstring_view lower_application_name = wstr_to_lower(application_name, allocator);
+			std::wstring_view lower_application_name = wstr_to_lower(application_name, app_name_allocator);
 
 			if (used_app_names.contains(lower_application_name)) {
 				continue;
@@ -736,19 +737,19 @@ struct SearchEntriesQuery {
 	InstalledAppsQueryState* installed_apps_query;
 };
 
-void schedule_search_entries_query(Arena& arena, SearchEntriesQuery& query_state) {
+void schedule_search_entries_query(SearchEntriesQuery& query_state) {
 	PROFILE_FUNCTION();
 
 	std::vector<std::filesystem::path> known_folders = fs_get_known_folder_paths(
 			KnownFolderKind::Desktop | KnownFolderKind::StartMenu | KnownFolderKind::Programs);
 
 	{
-		ArenaSavePoint temp = arena_begin_temp(arena);
+		ArenaSavePoint temp = arena_begin_temp(s_app.temp_arena);
 
 		std::unordered_set<std::wstring_view> used_app_names;
 		for (const auto& known_folder : known_folders) {
 			try {
-				walk_directory(known_folder, s_app.entries, used_app_names, arena);
+				walk_directory(known_folder, s_app.entries, used_app_names, s_app.temp_arena);
 			} catch (std::exception e) {
 				log_error(e.what());
 			}
@@ -759,18 +760,19 @@ void schedule_search_entries_query(Arena& arena, SearchEntriesQuery& query_state
 
 	job_system_submit(resolve_shortcuts_task, s_app.entries.data(), s_app.entries.size());
 
-	query_state.installed_apps_query = platform_begin_installed_apps_query(arena,
+	query_state.installed_apps_query = platform_begin_installed_apps_query(s_app.temp_arena,
 			s_app.config.ms_store_query_method == MSStoreQueryMethod::Experimental);
 }
 
-void collect_search_entries_query_result(Arena& arena, SearchEntriesQuery& query_state) {
+void collect_search_entries_query_result(Arena& arena, Arena& temp_arena, SearchEntriesQuery& query_state) {
 	PROFILE_FUNCTION();
 
-	job_system_wait_for_all(arena);
+	job_system_wait_for_all(arena, temp_arena);
 	
 	std::vector<InstalledAppDesc> installed_apps = platform_finish_installed_apps_query(
 			query_state.installed_apps_query,
-			arena);
+			arena,
+			temp_arena);
 
 	// TODO: reserve entries
 	for (const auto& app_desc : installed_apps) {
@@ -1253,6 +1255,8 @@ int run_app(CommandLineArgs cmd_args) {
 
 	s_app.arena = {};
 	s_app.arena.capacity = mb_to_bytes(8);
+	s_app.temp_arena = {};
+	s_app.temp_arena.capacity = mb_to_bytes(8);
 
 	if (!setup_app_data_dir_path()) {
 		arena_release(s_app.arena);
@@ -1324,7 +1328,7 @@ int run_app(CommandLineArgs cmd_args) {
 	platform_initialize();
 
 	SearchEntriesQuery search_entries_query{};
-	schedule_search_entries_query(s_app.arena, search_entries_query);
+	schedule_search_entries_query(search_entries_query);
 
 	if (s_app.use_keyboard_hook) {
 		init_keyboard_hook(s_app.arena);
@@ -1336,7 +1340,7 @@ int run_app(CommandLineArgs cmd_args) {
 	window_hide(s_app.window);
 
 	// At this point the search entry must be made available
-	collect_search_entries_query_result(s_app.arena, search_entries_query);
+	collect_search_entries_query_result(s_app.arena, s_app.temp_arena, search_entries_query);
 
 	deserialize_frequency_scores(Span(s_app.entries.data(), s_app.entries.size()), s_app.arena);
 
@@ -1361,6 +1365,8 @@ int run_app(CommandLineArgs cmd_args) {
 			}
 
 			run_app_frame();
+
+			arena_reset(s_app.temp_arena);
 			PROFILE_END_FRAME("Main");
 			break;
 		case AppState::Sleeping:
@@ -1396,6 +1402,7 @@ int run_app(CommandLineArgs cmd_args) {
 	log_shutdown();
 
 	arena_release(s_app.arena);
+	arena_release(s_app.temp_arena);
 
 	return 0;
 }

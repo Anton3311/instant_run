@@ -8,6 +8,7 @@ struct Arena;
 
 struct JobContext {
 	Arena& arena;
+	Arena& temp_arena;
 	size_t batch_size;
 	uint32_t worker_index;
 };
@@ -32,6 +33,6 @@ void job_system_submit_batches(JobSystemTask task, Span<T> data, size_t batch_si
 	}
 }
 
-void job_system_wait_for_all(Arena& task_execution_allocator);
+void job_system_wait_for_all(Arena& arena, Arena& temp_arena);
 
 void job_system_shutdown();

@@ -202,7 +202,8 @@ InstalledAppsQueryState* platform_begin_installed_apps_query(Arena& temp_arena, 
 
 // Waits until all the jobs scheduled by `platform_begin_installed_apps_query` and then collects the result.
 std::vector<InstalledAppDesc> platform_finish_installed_apps_query(InstalledAppsQueryState* query_state,
-		Arena& job_execution_arena);
+		Arena& job_execution_arena,
+		Arena& job_execution_temp_arena);
 
 bool platform_launch_installed_app(const wchar_t* app_id);
 

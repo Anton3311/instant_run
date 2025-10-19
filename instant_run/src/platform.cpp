@@ -466,25 +466,22 @@ void window_hide(Window* window) {
 }
 
 void window_focus(Window* window) {
-	EnableWindow(window->handle, true);
-
 	if (!BringWindowToTop(window->handle)) {
 		log_error(L"failed to bring window to top");
 		platform_log_error_message();
-		return;
 	}
 
 	if (!SetForegroundWindow(window->handle)) {
 		log_error(L"failed to set foreground window");
-		return;
 	}
 
-	SetFocus(window->handle);
-
-	if (GetLastError() == 0x57) {
-		log_error(L"failed to focus window: ");
-		platform_log_error_message();
-		return;
+	if (SetFocus(window->handle) == NULL) {
+		if (GetLastError() == ERROR_INVALID_PARAMETER) {
+			log_error(L"failed to focus window, due to it being disabled");
+		} else {
+			log_error(L"failed to focus window");
+			platform_log_error_message();
+		}
 	}
 }
 

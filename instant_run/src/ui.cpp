@@ -1,6 +1,7 @@
 #include "ui.h"
 
 #include "platform.h"
+#include "log.h"
 
 #include <cstring>
 #include <vector>
@@ -322,11 +323,17 @@ float get_default_font_height() {
 
 Vec2 compute_text_size(const Font& font, std::wstring_view text, float max_width) {
 	Vec2 total_size = {};
-	compute_text_size(font, &text, &total_size, 1, max_width);
+	Vec2 start_position = {};
+	compute_text_size(font, &text, &total_size, &start_position, 1, max_width);
 	return total_size;
 }
 
-Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2* sizes, size_t string_count, float max_width) {
+Vec2 compute_text_size(const Font& font,
+		const std::wstring_view* strings,
+		Vec2* sizes,
+		Vec2* start_positions,
+		size_t string_count,
+		float max_width) {
 	PROFILE_FUNCTION();
 
 	const float scale = stbtt_ScaleForPixelHeight(&font.info, font.size);
@@ -339,7 +346,7 @@ Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2*
 		std::wstring_view text = strings[string_index];
 
 		Vec2 string_start_position = char_position;
-		float text_width = 0.0f;
+		start_positions[string_index] = string_start_position;
 
 		for (size_t i = 0; i < text.size(); i++) {
 			uint32_t c = text[i];
@@ -371,13 +378,12 @@ Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2*
 				break;
 			}
 
-			int32_t kerning_advance = 0;
 			bool is_last_char = i + 1 == text.size();
 			bool is_last_string = string_index + 1 == string_count;
 			bool is_at_end = is_last_char && is_last_string;
 
 			if (!is_at_end) {
-				char next_char = 0;
+				wchar_t next_char = 0;
 				if (is_last_char) {
 					// It is possible that the next string is empty, so look for the next non-empty
 					for (size_t next_string_index = string_index + 1; next_string_index < string_count; next_string_index++) {
@@ -393,16 +399,13 @@ Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2*
 				}
 
 				if (next_char) {
-					kerning_advance = stbtt_GetCodepointKernAdvance(&font.info, text[i], next_char);
+					int32_t kerning_advance = stbtt_GetCodepointKernAdvance(&font.info, text[i], next_char);
 					char_position.x += (float)(kerning_advance) * scale;
-				} else {
-					// All the subsequent string parts are empty
 				}
 			}
-
-			text_width = char_position.x - string_start_position.x;
 		}
 
+		float text_width = char_position.x - string_start_position.x;
 		sizes[string_index] = Vec2 { text_width, font_height };
 		total_text_width += text_width;
 	}
@@ -968,17 +971,26 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 	Vec2 text_after_selection_size;
 
 	Vec2 text_size;
+	Rect text_selection_rect{};
 
 	// compute sizes of all text parts
 	{
 		std::wstring_view parts[3] = { text_before_selection, text_inside_selection, text_after_selection };
 		Vec2 part_sizes[3];
+		Vec2 start_positions[3];
 
-		text_size = compute_text_size(*s_ui_state.theme.default_font, parts, part_sizes, 3, FLT_MAX);
+		text_size = compute_text_size(*s_ui_state.theme.default_font,
+				parts,
+				part_sizes,
+				start_positions,
+				3, FLT_MAX);
 
 		text_before_selection_size = part_sizes[0];
 		text_inside_selection_size = part_sizes[1];
 		text_after_selection_size = part_sizes[2];
+
+		text_selection_rect.min = start_positions[1];
+		text_selection_rect.max = start_positions[1] + part_sizes[1];
 	}
 
 	Vec2 text_field_size{};
@@ -1008,17 +1020,11 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 	draw_rect(bounds, s_ui_state.theme.widget_color);
 
 	Vec2 text_position = bounds.min + s_ui_state.theme.frame_padding;
+	text_selection_rect.min += text_position;
+	text_selection_rect.max += text_position;
 
 	// draw selection
 	if (input_state.selection_start != input_state.selection_end) {
-		float selection_width = text_before_selection_size.x + text_inside_selection_size.x;
-
-		Rect text_selection_rect{};
-		text_selection_rect.min.x = text_position.x + text_before_selection_size.x;
-		text_selection_rect.min.y = text_position.y;
-		text_selection_rect.max.x = text_position.x + selection_width;
-		text_selection_rect.max.y = text_position.y + text_size.y;
-
 		draw_rect(text_selection_rect, Color { 0, 0, 255, 255 });
 	}
 
@@ -1034,13 +1040,13 @@ bool text_input(TextInputState& input_state, std::wstring_view prompt) {
 		float cursor_offset = 0.0f;
 		if (input_state.selection_start >= input_state.selection_end) {
 			// cursor is on the left boundary of the selection
-			cursor_offset = text_before_selection_size.x;
+			cursor_offset = text_selection_rect.min.x;
 		} else {
 			// cursor is on the right boundary of the selection
-			cursor_offset = text_before_selection_size.x + text_inside_selection_size.x;
+			cursor_offset = text_selection_rect.max.x;
 		}
 
-		Vec2 text_cursor_position = Vec2 { text_position.x + cursor_offset, text_position.y };
+		Vec2 text_cursor_position = Vec2 { cursor_offset, text_position.y };
 		Vec2 cursor_size = Vec2 { 2.0f, text_size.y }; // cursor has the same height as the text
 		draw_rect(Rect { text_cursor_position, text_cursor_position + cursor_size }, WHITE);
 	}
@@ -1057,17 +1063,18 @@ void colored_text(const std::wstring_view* text_parts, const Color* colors, size
 
 	ArenaSavePoint temp = arena_begin_temp(*s_ui_state.arena);
 	Vec2* part_sizes = arena_alloc_array<Vec2>(*s_ui_state.arena, text_part_count);
+	Vec2* part_start_positions = arena_alloc_array<Vec2>(*s_ui_state.arena, text_part_count);
 
 	float available_space = get_available_layout_space();
 	Vec2 text_size = compute_text_size(*s_ui_state.theme.default_font,
 			text_parts,
 			part_sizes,
+			part_start_positions,
 			text_part_count,
 			available_space);
 
 	add_item(text_size);
 	Vec2 text_position = s_ui_state.last_item.bounds.min;
-	Vec2 text_part_position = text_position;
 
 	for (size_t i = 0; i < text_part_count; i++) {
 		Vec2 text_size = part_sizes[i];
@@ -1078,12 +1085,10 @@ void colored_text(const std::wstring_view* text_parts, const Color* colors, size
 		}
 
 		draw_text(text_parts[i],
-				text_part_position,
+				text_position + part_start_positions[i],
 				*s_ui_state.theme.default_font,
 				colors[i],
-				available_space - (text_part_position.x - text_position.x));
-
-		text_part_position.x += text_size.x;
+				available_space - part_start_positions[i].x);
 	}
 
 	arena_end_temp(temp);

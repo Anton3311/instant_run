@@ -131,7 +131,13 @@ Vec2 compute_text_size(const Font& font, std::wstring_view text, float max_width
 // Returns the total size of the line which consists of multiple strings.
 //
 // `sizes` recieves the size of each string passed in the `strings` array
-Vec2 compute_text_size(const Font& font, const std::wstring_view* strings, Vec2* sizes, size_t string_count, float max_width);
+// `start_positions` recieves the starting position of each part
+Vec2 compute_text_size(const Font& font,
+		const std::wstring_view* strings,
+		Vec2* sizes,
+		Vec2* start_positions,
+		size_t string_count,
+		float max_width);
 
 //
 // UI Item

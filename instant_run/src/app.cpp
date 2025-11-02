@@ -1238,6 +1238,8 @@ void run_app_frame() {
 			}
 			break;
 		}
+
+		serialize_frequency_scores(Span<const Entry>(s_app.entries.data(), s_app.entries.size()));
 	}
 
 	ui::end_vertical_layout();
